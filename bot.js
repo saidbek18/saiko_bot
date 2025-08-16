@@ -27,7 +27,7 @@ bot.start(async (ctx) => {
     // Admin menyu
     if(admins.includes(userId)){
         await ctx.reply('Siz adminsiz! Admin menyu:', Markup.keyboard([
-            ['Kino qo‘shish']
+            ['Kino qo‘shish','Reklama qoshish']
         ]).resize());
     }
 });
