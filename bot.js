@@ -161,6 +161,136 @@ bot.on('text', async (ctx) => {
         return;
     }
 });
+// =================== REKLAMA JARAYONI ===================
+bot.hears('Reklama jo‘natish', async (ctx) => {
+    const userId = ctx.from.id.toString();
+    if(!admins.includes(userId)) return;
+
+    state[userId] = { step: 'waiting_for_ad_media' };
+    saveJSON('state.json', state);
+
+    await ctx.reply('📷 Iltimos reklama uchun rasm yoki video yuboring.');
+});
+bot.on(['photo', 'video'], async (ctx) => {
+    const userId = ctx.from.id.toString();
+    if(!state[userId] || state[userId].step !== 'waiting_for_ad_media') return;
+
+    if(ctx.message.photo){
+        state[userId] = { step: 'confirm_ad_media', media: { type: 'photo', file_id: ctx.message.photo.pop().file_id } };
+    } else if(ctx.message.video){
+        state[userId] = { step: 'confirm_ad_media', media: { type: 'video', file_id: ctx.message.video.file_id } };
+    }
+    saveJSON('state.json', state);
+
+    await ctx.reply('✅ Media qabul qilindi. Tasdiqlaysizmi?', Markup.inlineKeyboard([
+        Markup.button.callback('Ha', 'confirm_ad_media'),
+        Markup.button.callback('Yo‘q', 'cancel')
+    ]));
+});
+bot.action('confirm_ad_media', async (ctx) => {
+    const userId = ctx.from.id.toString();
+    if(!state[userId] || state[userId].step !== 'confirm_ad_media') return;
+
+    state[userId].step = 'waiting_for_ad_text';
+    saveJSON('state.json', state);
+
+    await ctx.editMessageText('✍️ Endi reklama uchun matn yozing.');
+});
+bot.on('text', async (ctx) => {
+    const userId = ctx.from.id.toString();
+    const text = ctx.message.text;
+
+    // Reklama matni
+    if(state[userId] && state[userId].step === 'waiting_for_ad_text'){
+        state[userId].text = text;
+        state[userId].step = 'ask_button';
+        saveJSON('state.json', state);
+
+        await ctx.reply(`📌 Matn qabul qilindi:\n\n${text}\n\nTugma qo‘shasizmi?`, 
+            Markup.inlineKeyboard([
+                Markup.button.callback('Ha', 'add_ad_button'),
+                Markup.button.callback('Yo‘q', 'skip_ad_button')
+            ])
+        );
+        return;
+    }
+
+    // Tugma matni
+    if(state[userId] && state[userId].step === 'waiting_for_button_text'){
+        state[userId].buttonText = text;
+        state[userId].step = 'waiting_for_button_url';
+        saveJSON('state.json', state);
+
+        await ctx.reply('🔗 Endi tugma uchun link yuboring.');
+        return;
+    }
+
+    // Tugma linki
+    if(state[userId] && state[userId].step === 'waiting_for_button_url'){
+        state[userId].buttonUrl = text;
+        state[userId].step = 'confirm_ready_ad';
+        saveJSON('state.json', state);
+
+        await ctx.reply('✅ Tugma qo‘shildi. Reklama tayyor. Tasdiqlaysizmi?', 
+            Markup.inlineKeyboard([
+                Markup.button.callback('Ha', 'send_ad'),
+                Markup.button.callback('Yo‘q', 'cancel')
+            ])
+        );
+        return;
+    }
+});
+bot.action('add_ad_button', async (ctx) => {
+    const userId = ctx.from.id.toString();
+    state[userId].step = 'waiting_for_button_text';
+    saveJSON('state.json', state);
+
+    await ctx.editMessageText('Tugma ustida yoziladigan matnni yuboring:');
+});
+
+bot.action('skip_ad_button', async (ctx) => {
+    const userId = ctx.from.id.toString();
+    state[userId].step = 'confirm_ready_ad';
+    saveJSON('state.json', state);
+
+    await ctx.editMessageText('Reklama tayyor. Tasdiqlaysizmi?', 
+        Markup.inlineKeyboard([
+            Markup.button.callback('Ha', 'send_ad'),
+            Markup.button.callback('Yo‘q', 'cancel')
+        ])
+    );
+});
+bot.action('send_ad', async (ctx) => {
+    const userId = ctx.from.id.toString();
+    if(!state[userId] || state[userId].step !== 'confirm_ready_ad') return;
+
+    const ad = state[userId];
+    let extra = {};
+    if(ad.buttonText && ad.buttonUrl){
+        extra = {
+            reply_markup: {
+                inline_keyboard: [[{ text: ad.buttonText, url: ad.buttonUrl }]]
+            }
+        };
+    }
+
+    for(const uid in users){
+        try {
+            if(ad.media.type === 'photo'){
+                await ctx.telegram.sendPhoto(uid, ad.media.file_id, { caption: ad.text, ...extra });
+            } else {
+                await ctx.telegram.sendVideo(uid, ad.media.file_id, { caption: ad.text, ...extra });
+            }
+        } catch(e){
+            console.log(`❌ ${uid} ga yuborilmadi`);
+        }
+    }
+
+    state[userId] = null;
+    saveJSON('state.json', state);
+
+    await ctx.editMessageText('✅ Reklama barcha foydalanuvchilarga yuborildi!');
+});
 
 // =================== TASDIQLASH ===================
 bot.action('confirm_video', async (ctx) => {
