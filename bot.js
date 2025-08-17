@@ -11,9 +11,6 @@ let state = fs.existsSync('state.json') ? JSON.parse(fs.readFileSync('state.json
 
 let users = {}; // foydalanuvchi holati
 
-function saveJSON(file, data){
-    fs.writeFileSync(file, JSON.stringify(data, null, 2));
-}
 
 // =================== START ===================
 bot.start(async (ctx) => {
