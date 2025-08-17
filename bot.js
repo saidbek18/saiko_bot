@@ -1,4 +1,3 @@
-𝜍𝛂𝛊𝜟┋🇺🇸┋𝛲𝛢𝛸𝛢𝛮, [16/08/2025 21:11]
 const { Telegraf, Markup } = require('telegraf');
 const fs = require('fs');
 
@@ -157,7 +156,6 @@ bot.on('text', async (ctx) => {
         return;
     }
 
-𝜍𝛂𝛊𝜟┋🇺🇸┋𝛲𝛢𝛸𝛢𝛮, [16/08/2025 21:11]
 // Foydalanuvchi kodi orqali kino olish (faqat obunachilar)
     if(users[userId] && users[userId].subscribed){
         // Agar admin kino qo‘shish jarayonida bo'lmasa, kodi soramasin
