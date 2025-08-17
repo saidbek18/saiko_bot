@@ -3,7 +3,7 @@ const fs = require("fs");
 
 // 🔑 Token va Admin ID
 const bot = new Telegraf("7782418983:AAFw1FYb-ESFb-1abiSudFlzhukTAkylxFA");
-const adminId = 123456789; // Admin ID ni yozing
+const adminId = 8165064673; // Admin ID ni yozing
 
 // 📂 Fayllar
 const moviesFile = "movies.json";
