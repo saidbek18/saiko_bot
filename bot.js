@@ -1,249 +1,138 @@
-const { Telegraf, Markup } = require('telegraf');
-const fs = require('fs');
+const { Telegraf, Markup } = require("telegraf");
+const fs = require("fs");
 
-const bot = new Telegraf('7782418983:AAFw1FYb-ESFb-1abiSudFlzhukTAkylxFA'); // Tokeningiz
+// 🔑 Token va Admin ID
+const bot = new Telegraf("7782418983:AAFw1FYb-ESFb-1abiSudFlzhukTAkylxFA");
+const adminId = 123456789; // Admin ID ni yozing
 
-// JSON fayllarni yuklash
-let admins = fs.existsSync('admins.json') ? JSON.parse(fs.readFileSync('admins.json')) : ["8165064673"];
-let channels = fs.existsSync('channels.json') ? JSON.parse(fs.readFileSync('channels.json')) : ["@saikostars"];
-let movies = fs.existsSync('movies.json') ? JSON.parse(fs.readFileSync('movies.json')) : {};
-let state = fs.existsSync('state.json') ? JSON.parse(fs.readFileSync('state.json')) : {};
+// 📂 Fayllar
+const moviesFile = "movies.json";
+const channelsFile = "channels.json";
 
-let users = {}; // foydalanuvchi holati
-
-function saveJSON(file, data){
-    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+// 📌 JSON o‘qish funksiyasi
+function loadJson(file, defaultData) {
+  if (fs.existsSync(file)) {
+    return JSON.parse(fs.readFileSync(file));
+  }
+  return defaultData;
 }
 
-// =================== START ===================
+// 📌 JSON saqlash funksiyasi
+function saveJson(file, data) {
+  fs.writeFileSync(file, JSON.stringify(data, null, 2));
+}
+
+// 📂 Fayllarni boshlang‘ich yuklash
+let movies = loadJson(moviesFile, []);
+let channels = loadJson(channelsFile, ["@saikostars", "@zxsaikomusic"]); // Kanal ro‘yxati
+
+// 🚀 /start komandasi
 bot.start(async (ctx) => {
-    const userId = ctx.from.id.toString();
-    users[userId] = users[userId]  { subscribed: false };
+  const user = ctx.from;
+  let buttons = channels.map((ch) => [Markup.button.url(`📢 Kanal`, `https://t.me/${ch.replace("@", "")}`)]);
+  
+  buttons.push([Markup.button.callback("✅ Tekshirish", "check")]);
 
-    let channelButtons = channels.map(c => Markup.button.url('Kanal', `https://t.me/${c.replace('@','')}`));
-    await ctx.reply('Iltimos kanallarga obuna bo‘ling:', Markup.inlineKeyboard(channelButtons, { columns: 1 }));
-    await ctx.reply('Obuna bo‘lgach, /check yozing.');
+  await ctx.reply(
+    `Salom, ${user.first_name}!\nBotdan foydalanish uchun quyidagi kanallarga obuna bo‘ling:`,
+    Markup.inlineKeyboard(buttons)
+  );
+});
 
-    // Admin menyu
-    if(admins.includes(userId)){
-        await ctx.reply('Siz adminsiz! Admin menyu:', Markup.keyboard([
-            ['Kino qo‘shish','Reklama jonatish']
-        ]).resize());
+// 📌 Obuna tekshirish
+bot.action("check", async (ctx) => {
+  let allJoined = true;
+
+  for (let ch of channels) {
+    try {
+      let member = await ctx.telegram.getChatMember(ch, ctx.from.id);
+      if (["left", "kicked"].includes(member.status)) {
+        allJoined = false;
+      }
+    } catch (e) {
+      allJoined = false;
     }
+  }
+
+  if (!allJoined) {
+    return ctx.reply("❌ Siz barcha kanallarga obuna bo‘lmadingiz!");
+  }
+
+  // ✅ Obuna tasdiqlandi
+  return ctx.reply(
+    "✅ Obuna tasdiqlandi!\nEndi kinolarni ko‘rishingiz mumkin.",
+    Markup.inlineKeyboard([
+      [Markup.button.callback("🎬 Kinolar", "movies")],
+      [Markup.button.callback("➕ Kino qo‘shish (Admin)", "add_movie")]
+    ])
+  );
 });
 
-// =================== CHECK ===================
-bot.command('check', async (ctx) => {
-    const userId = ctx.from.id.toString();
-    users[userId].subscribed = true;
-    await ctx.reply('Obuna tasdiqlandi! Endi kino kodi kiriting:');
+// 📌 Kinolar ro‘yxati
+bot.action("movies", async (ctx) => {
+  if (movies.length === 0) {
+    return ctx.reply("📭 Hozircha kinolar mavjud emas.");
+  }
+
+  for (let movie of movies) {
+    await ctx.replyWithPhoto(movie.photo, {
+      caption: `🎬 ${movie.title}\n📖 ${movie.description}\n📥 [Ko‘rish](${movie.link})`,
+      parse_mode: "Markdown"
+    });
+  }
 });
 
-// =================== ADMIN PANEL ===================
-bot.command('admin', async (ctx) => {
-    const userId = ctx.from.id.toString();
-    if(!admins.includes(userId)) return ctx.reply('Siz admin emassiz!');
+// 📌 Admin - Kino qo‘shish
+bot.action("add_movie", async (ctx) => {
+  if (ctx.from.id !== adminId) {
+    return ctx.reply("❌ Siz admin emassiz!");
+  }
 
-    await ctx.reply('Admin menyu:', Markup.keyboard([
-        ['Kino qo‘shish', 'Reklama jo‘natish']
-    ]).resize());
-});
+  ctx.reply("🎬 Kino nomini yuboring:");
+  bot.on("text", async (msgCtx) => {
+    if (!msgCtx.session) msgCtx.session = {};
+    if (!msgCtx.session.step) msgCtx.session.step = "title";
 
-// =================== KINO QO‘SHISH ===================
-bot.hears('Kino qo‘shish', async (ctx) => {
-    const userId = ctx.from.id.toString();
-    if(!admins.includes(userId)) return;
-
-    state[userId] = { step: 'waiting_for_video' };
-    saveJSON('state.json', state);
-
-    await ctx.reply('Iltimos kino video yuboring:', Markup.inlineKeyboard([
-        Markup.button.callback('Bekor qilish', 'cancel')
-    ]));
-});
-
-// Bekor qilish
-bot.action('cancel', async (ctx) => {
-    const userId = ctx.from.id.toString();
-    state[userId] = null;
-    saveJSON('state.json', state);
-    await ctx.editMessageText('Amal bekor qilindi. Endi boshqa menyularni ishlatishingiz mumkin.');
-});
-
-// Video qabul qilish
-bot.on('video', async (ctx) => {
-    const userId = ctx.from.id.toString();
-    if(!state[userId]  state[userId].step !== 'waiting_for_video') return;
-
-    const videoId = ctx.message.video.file_id;
-    state[userId] = { step: 'waiting_for_code', videoId };
-    saveJSON('state.json', state);
-
-    await ctx.reply('Kino kodi kiriting:');
-});
-
-// Rasm yuborilsa
-bot.on('photo', async (ctx) => {
-    const userId = ctx.from.id.toString();
-    if(state[userId] && state[userId].step === 'waiting_for_video'){
-        await ctx.reply('Faqat video qabul qilinadi! Iltimos video yuboring.');
-    }
-});
-// Reklama jo‘natish jarayoni
-bot.hears('Reklama jo‘natish', async (ctx) => {
-    const userId = ctx.from.id.toString();
-    if (!admins.includes(userId)) return;
-
-    state[userId] = { step: 'ad_text' };
-    saveJSON('state.json', state);
-
-    await ctx.reply('📢 Reklama matnini yuboring:');
-});
-// =================== REKLAMA JO'NATISH ===================
-if (state[userId] && state[userId].step === 'ad_text') {
-    state[userId] = { step: 'ad_button', text: text };
-    saveJSON('state.json', state);
-    return ctx.reply('🔘 Tugma nomini yuboring:');
-}
-
-if (state[userId] && state[userId].step === 'ad_button') {
-    state[userId].btnText = text;
-    state[userId].step = 'ad_link';
-    saveJSON('state.json', state);
-    return ctx.reply('🔗 Tugma linkini yuboring:');
-}
-
-if (state[userId] && state[userId].step === 'ad_link') {
-    const reklama = state[userId];
-    reklama.btnUrl = text;
-
-    // Reklamani barcha foydalanuvchilarga yuborish
-    for (const uid in users) {
-        try {
-            await ctx.telegram.sendMessage(
-                uid,
-                reklama.text,
-                Markup.inlineKeyboard([
-                    [Markup.button.url(reklama.btnText, reklama.btnUrl)]
-                ])
-            );
-        } catch (e) {
-            console.log(`❌ Foydalanuvchi ${uid} ga reklama yuborilmadi.`);
-        }
+    if (msgCtx.session.step === "title") {
+      msgCtx.session.title = msgCtx.message.text;
+      msgCtx.session.step = "description";
+      return msgCtx.reply("📖 Kino haqida qisqacha yozing:");
     }
 
-    state[userId] = null;
-    saveJSON('state.json', state);
-
-    return ctx.reply('✅ Reklama barcha foydalanuvchilarga jo‘natildi!');
-}
-
-// =================== TEXT HANDLER ===================
-bot.on('text', async (ctx) => {
-    const userId = ctx.from.id.toString();
-    const text = ctx.message.text;
-
-    // Kino qo‘shish jarayoni
-    if(state[userId] && state[userId].step === 'waiting_for_code'){
-        const videoId = state[userId].videoId;
-        state[userId] = { step: 'confirm', videoId, code: text };
-        saveJSON('state.json', state);
-
-        await ctx.reply(Kodi: ${text}\nKino tasdiqlansinmi?, Markup.inlineKeyboard([
-            Markup.button.callback('Tasdiqlash', 'confirm_video'),
-            Markup.button.callback('Bekor qilish', 'cancel')
-        ]));
-        return;
+    if (msgCtx.session.step === "description") {
+      msgCtx.session.description = msgCtx.message.text;
+      msgCtx.session.step = "photo";
+      return msgCtx.reply("🖼 Kino rasmini yuboring:");
     }
+  });
 
-// Foydalanuvchi kodi orqali kino olish (faqat obunachilar)
-    if(users[userId] && users[userId].subscribed){
-        // Agar admin kino qo‘shish jarayonida bo'lmasa, kodi soramasin
-        if(!state[userId]  !['waiting_for_video','waiting_for_code','confirm'].includes(state[userId].step)){
-            if(movies[text]){
-                await ctx.replyWithVideo(movies[text], { caption: `Sizning kinoingiz kodi: ${text}` });
-                state[userId] = { last_watched: text, username: ctx.from.username  '', first_name: ctx.from.first_name };
-                saveJSON('state.json', state);
-            } else if(!text.startsWith('/')){
-                await ctx.reply('Bunday kino kodi topilmadi!');
-            }
-        }
-    }
+  bot.on("photo", async (msgCtx) => {
+    if (!msgCtx.session || msgCtx.session.step !== "photo") return;
+    msgCtx.session.photo = msgCtx.message.photo[msgCtx.message.photo.length - 1].file_id;
+    msgCtx.session.step = "link";
+    return msgCtx.reply("📥 Kino linkini yuboring:");
+  });
 
-    // /delete komandasi
-    if(text.startsWith('/delete ')){
-        if(!admins.includes(userId)) return ctx.reply('Siz admin emassiz!');
-        const arg = text.split(' ')[1];
-        if(movies[arg]){
-            delete movies[arg];
-            saveJSON('movies.json', movies);
-            return ctx.reply(Kino kodi ${arg} o‘chirildi.);
-        }
-    }
+  bot.on("text", async (msgCtx) => {
+    if (msgCtx.session && msgCtx.session.step === "link") {
+      msgCtx.session.link = msgCtx.message.text;
 
-    // /addadmin komandasi
-    if(text.startsWith('/addadmin ')){
-        if(!admins.includes(userId)) return ctx.reply('Siz admin emassiz!');
-        const newAdmin = text.split(' ')[1];
-        if(!admins.includes(newAdmin)){
-            admins.push(newAdmin);
-            saveJSON('admins.json', admins);
-            return ctx.reply(Yangi admin qo‘shildi: ${newAdmin});
-        } else {
-            return ctx.reply('Bu admin allaqachon mavjud.');
-        }
-    }
+      // 🎉 Kino saqlash
+      movies.push({
+        title: msgCtx.session.title,
+        description: msgCtx.session.description,
+        photo: msgCtx.session.photo,
+        link: msgCtx.session.link,
+      });
 
-    // =================== REKLAMA JO'NATISH ===================
-    if(state[userId] && state[userId].step === 'waiting_for_ad'){
-        for(const uid in users){
-            try {
-                await ctx.telegram.sendMessage(uid, 📢 Reklama:\n\n${text});
-            } catch(e){
-                console.log(Foydalanuvchi ${uid}ga reklama yuborilmadi.);
-            }
-        }
-        state[userId] = null;
-        saveJSON('state.json', state);
-        await ctx.reply('Reklama barcha foydalanuvchilarga jo‘natildi!');
-        return;
+      saveJson(moviesFile, movies);
+
+      msgCtx.reply("✅ Kino muvaffaqiyatli qo‘shildi!");
+      msgCtx.session = null;
     }
+  });
 });
 
-// =================== TASDIQLASH ===================
-bot.action('confirm_video', async (ctx) => {
-    const userId = ctx.from.id.toString();
-    if(!state[userId] || state[userId].step !== 'confirm') return;
-
-    const { videoId, code } = state[userId];
-    movies[code] = videoId;
-    saveJSON('movies.json', movies);
-
-    state[userId] = { step: 'ask_more' };
-    saveJSON('state.json', state);
-
-    await ctx.editMessageText(Kino tasdiqlandi! Kodi: ${code});
-    await ctx.reply('Yana kino kiritasizmi?', Markup.inlineKeyboard([
-        Markup.button.callback('Ha', 'add_more'),
-        Markup.button.callback('Yo‘q', 'add_no')
-    ]));
-});
-
-// Yana kino qo‘shish
-bot.action('add_more', async (ctx) => {
-    const userId = ctx.from.id.toString();
-    state[userId] = { step: 'waiting_for_video' }; // yana video kutish
-    saveJSON('state.json', state);
-    await ctx.editMessageText('Iltimos yangi kino video yuboring:');
-});
-
-// Kino qo‘shishni yakunlash
-bot.action('add_no', async (ctx) => {
-    const userId = ctx.from.id.toString();
-    state[userId] = null;
-    saveJSON('state.json', state);
-    await ctx.editMessageText('Kino qo‘shish yakunlandi. Endi boshqa menyularni ishlatishingiz mumkin.');
-});
-
+// 🚀 Botni ishga tushirish
 bot.launch();
-console.log('Bot ishga tushdi!');
+console.log("🤖 Bot ishga tushdi...");
