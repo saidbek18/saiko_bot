@@ -12,7 +12,7 @@ const path = require("path");
 // ==============================
 
 // Tokeningizni shu yerga yozing
-const BOT_TOKEN = "YOUR_BOT_TOKEN"; 
+const BOT_TOKEN = "7782418983:AAFw1FYb-ESFb-1abiSudFlzhukTAkylxFA"; 
 const bot = new Telegraf(BOT_TOKEN);
 
 // Fayllar
