@@ -1,3 +1,22 @@
+/**
+ * bot.js
+ * To'liq ishlaydigan Telegram kino bot (Node.js + Telegraf)
+ *
+ * Talablar:
+ *  - node >= 14
+ *  - npm install telegraf
+ *
+ * Fayllar (papkada bo'lishi kerak):
+ *  - admins.json   (["8165064673"])
+ *  - channels.json (["@kanal1","@kanal2",...])
+ *  - movies.json   ([ ... ])
+ *
+ * Ishga tushirish:
+ *  node bot.js
+ *
+ * Token: siz bergan token quyida joylangan.
+ */
+
 const { Telegraf, Markup } = require("telegraf");
 const fs = require("fs");
 const path = require("path");
@@ -75,7 +94,16 @@ function ensureUser(userId) {
 }
 
 // ---------- Admin state machine ----------
-
+/*
+  adminStates structure:
+  {
+    "<adminId>": {
+      mode: "add_movie" | "add_ad" | null,
+      step: number,
+      data: { ... }  // depends on mode
+    }
+  }
+*/
 const adminStates = {};
 
 function startAdminFlow(adminId, mode) {
@@ -113,19 +141,39 @@ bot.start(async (ctx) => {
 });
 
 // Tekshirish callback
-bot.action("check_subs", async (ctx) => {
+// Obuna tekshirish funksiyasi
+async function checkSubscription(ctx) {
   try {
-    await ctx.answerCbQuery(); // yuklanish belgisi o'chadi
-    const notSubscribed = await checkSubscription(ctx);
-    if (notSubscribed.length > 0) {
-      return ctx.editMessageText(
-        "Hali hammasiga obuna bo‘lmadingiz:",
-        Markup.inlineKeyboard([
-          ...notSubscribed.map((ch) => [Markup.button.url(ch, `Obuna bo‘lish`)]),
-          [Markup.button.callback("✅ Tekshirish", "check_subs")]
-        ])
-      );
+    const userId = ctx.from.id;
+    let notSubscribed = [];
+
+    for (let channel of channels) {
+      try {
+        let member = await ctx.telegram.getChatMember(channel.id, userId);
+        if (member.status !== "member" && member.status !== "administrator" && member.status !== "creator") {
+          notSubscribed.push(channel);
+        }
+      } catch (error) {
+        console.log("Xatolik:", error.description);
+      }
     }
+
+    if (notSubscribed.length > 0) {
+      let buttons = notSubscribed.map((c) => [Markup.button.url(c.name, c.link)]);
+      await ctx.reply(
+        "Quyidagi kanallarga obuna bo‘ling 👇",
+        Markup.inlineKeyboard([...buttons, [Markup.button.callback("✅ Tekshirish", "check")]])
+      );
+      return false;
+    }
+
+    return true;
+  } catch (err) {
+    console.error(err);
+    return false;
+  }
+}
+
     // hammasi obuna bo'ldi
     ensureUser(ctx.from.id);
     try { await ctx.editMessageText("✅ Obuna tasdiqlandi!"); } catch (e) { /* message o'zgargan bo'lishi mumkin */ }
@@ -149,164 +197,31 @@ bot.command("admin", (ctx) => {
 });
 
 // ---------- Admin ishlari: Kino qo'shish ----------
-// === ADMINS JSON dan o‘qilgan massiv bo‘lishi kerak ===
-let ADMINS = JSON.parse(fs.readFileSync("admins.json", "utf8"));
-
-// === Admin kino qo‘shish tugmasi ===
 bot.hears("🎬 Kino qo‘shish", (ctx) => {
   const uid = String(ctx.from.id);
-  if (!ADMINS.includes(uid)) return; // faqat admin ishlatsin
+  if (!ADMINS.includes(uid)) return;
   startAdminFlow(uid, "add_movie");
-  ctx.reply("🎥 Kino videosini yuboring (video fayl yoki file_id). Bekor qilish uchun '⛔ Bekor qilish'.");
+  ctx.reply("Kino videosini yuboring (video fayl yoki telegram file_id bilan). Bekor qilish uchun '⛔ Bekor qilish' -ni bosing.");
 });
 
-// === Admin reklama tugmasi ===
+// Admin: Reklama
 bot.hears("📢 Reklama yuborish", (ctx) => {
   const uid = String(ctx.from.id);
   if (!ADMINS.includes(uid)) return;
   startAdminFlow(uid, "add_ad");
-  ctx.reply("📢 Reklama uchun rasm yoki video yuboring. Bekor qilish uchun '⛔ Bekor qilish'.");
+  ctx.reply("Reklama uchun rasm yoki video yuboring. Bekor qilish uchun '⛔ Bekor qilish' -ni bosing.");
 });
 
-// === Bekor qilish tugmasi ===
+// Bekor qilish
 bot.hears("⛔ Bekor qilish", (ctx) => {
   const uid = String(ctx.from.id);
   if (ADMINS.includes(uid)) {
     clearAdminState(uid);
     ctx.reply("✅ Admin jarayoni bekor qilindi.", Markup.removeKeyboard());
   } else {
-    ctx.reply("❌ Amal bekor qilindi.");
+    ctx.reply("Amal bekor qilindi.");
   }
 });
-
-// === Media handler (faqat admin jarayonlari uchun) ===
-bot.on(["photo", "video", "document"], async (ctx) => {
-  const uid = String(ctx.from.id);
-  const state = getAdminState(uid);
-  if (!state || !ADMINS.includes(uid)) return; // oddiy foydalanuvchidan media kelgan bo‘lsa → e’tibor bermaymiz
-
-  if (state.mode === "add_movie" && !state.data.file_id) {
-    if (ctx.message.video) {
-      state.data.file_id = ctx.message.video.file_id;
-      state.step = 1;
-      return ctx.reply("🎬 Kino kodi kiriting (masalan: 1 yoki ABC123).");
-    } else if (ctx.message.document && ctx.message.document.mime_type.startsWith("video/")) {
-      state.data.file_id = ctx.message.document.file_id;
-      state.step = 1;
-      return ctx.reply("🎬 Kino kodi kiriting (masalan: 1 yoki ABC123).");
-    } else {
-      return ctx.reply("❌ Iltimos faqat video yuboring.");
-    }
-  }
-
-  if (state.mode === "add_ad" && !state.data.file_id) {
-    if (ctx.message.photo) {
-      const last = ctx.message.photo.pop();
-      state.data.file_id = last.file_id;
-      state.data.type = "photo";
-      state.step = 1;
-      return ctx.reply("📝 Reklama matnini kiriting:");
-    } else if (ctx.message.video) {
-      state.data.file_id = ctx.message.video.file_id;
-      state.data.type = "video";
-      state.step = 1;
-      return ctx.reply("📝 Reklama matnini kiriting:");
-    } else {
-      return ctx.reply("❌ Reklama uchun rasm yoki video yuboring.");
-    }
-  }
-});
-
-// === Text handler ===
-bot.on("text", async (ctx) => {
-  const uid = String(ctx.from.id);
-  const text = ctx.message.text.trim();
-
-  // --- 1) Admin jarayoni bo‘lsa faqat adminni ishlatamiz ---
-  const state = getAdminState(uid);
-  if (state && ADMINS.includes(uid)) {
-    if (state.mode === "add_movie") {
-      if (state.step === 1) {
-        state.data.code = text;
-        state.step = 2;
-        return ctx.reply("📝 Kinoga matn yozing (caption).");
-      } else if (state.step === 2) {
-        state.data.text = text;
-        state.step = 3;
-        return ctx.reply(
-          `📌 Kino ma'lumotlari:\nKod: ${state.data.code}\nMatn: ${state.data.text}\n\nTasdiqlaysizmi? (Ha / Yo'q)`
-        );
-      } else if (state.step === 3) {
-        if (["ha", "yes"].includes(text.toLowerCase())) {
-          const exists = MOVIES.find((m) => m.code === state.data.code);
-          if (exists) {
-            MOVIES = MOVIES.map((m) =>
-              m.code === state.data.code
-                ? { code: state.data.code, file_id: state.data.file_id, text: state.data.text }
-                : m
-            );
-          } else {
-            MOVIES.push({ code: state.data.code, file_id: state.data.file_id, text: state.data.text });
-          }
-          writeJSON(MOVIES_FILE, MOVIES);
-          clearAdminState(uid);
-          return ctx.reply("✅ Kino muvaffaqiyatli saqlandi.", Markup.removeKeyboard());
-        } else {
-          clearAdminState(uid);
-          return ctx.reply("❌ Kino qo‘shish bekor qilindi.", Markup.removeKeyboard());
-        }
-      }
-    }
-
-    if (state.mode === "add_ad") {
-      if (state.step === 1) {
-        state.data.text = text;
-        state.step = 2;
-        return ctx.reply("🔗 Tugma uchun matn|link yuboring (masalan: Saytimiz|https://example.com)");
-      } else if (state.step === 2) {
-        const [btnText, btnUrl] = text.split("|");
-        state.data.btnText = btnText;
-        state.data.btnUrl = btnUrl;
-        state.step = 3;
-        return ctx.reply(
-          `📢 Reklama tayyor:\nMatn: ${state.data.text}\nTugma: ${state.data.btnText} → ${state.data.btnUrl}\n\nTasdiqlaysizmi? (Ha / Yo'q)`
-        );
-      } else if (state.step === 3) {
-        if (["ha", "yes"].includes(text.toLowerCase())) {
-          // 🔥 Reklamani barcha userlarga yuboramiz
-          USERS.forEach((u) => {
-            const opts = {
-              caption: state.data.text,
-              reply_markup: {
-                inline_keyboard: [[{ text: state.data.btnText, url: state.data.btnUrl }]],
-              },
-            };
-            if (state.data.type === "photo") {
-              bot.telegram.sendPhoto(u, state.data.file_id, opts);
-            } else {
-              bot.telegram.sendVideo(u, state.data.file_id, opts);
-            }
-          });
-          clearAdminState(uid);
-          return ctx.reply("✅ Reklama yuborildi.");
-        } else {
-          clearAdminState(uid);
-          return ctx.reply("❌ Reklama bekor qilindi.");
-        }
-      }
-    }
-    return; // Admin jarayonida oddiy foydalanuvchi kod qismi ishlamasin
-  }
-
-  // --- 2) Oddiy foydalanuvchi (kino kodi qidirish) ---
-  const movie = MOVIES.find((m) => m.code === text);
-  if (movie) {
-    return ctx.replyWithVideo(movie.file_id, { caption: movie.text });
-  } else {
-    return ctx.reply("❌ Bu kod bo‘yicha kino topilmadi.");
-  }
-});
-
 
 // Media handler: photo / video (admin jarayoni uchun)
 bot.on(["photo", "video", "document"], async (ctx) => {
@@ -559,3 +474,4 @@ process.once("SIGTERM", () => {
     console.error("Botni ishga tushirishda xato:", e);
   }
 })();
+
