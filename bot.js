@@ -149,31 +149,164 @@ bot.command("admin", (ctx) => {
 });
 
 // ---------- Admin ishlari: Kino qo'shish ----------
+// === ADMINS JSON dan o‘qilgan massiv bo‘lishi kerak ===
+let ADMINS = JSON.parse(fs.readFileSync("admins.json", "utf8"));
+
+// === Admin kino qo‘shish tugmasi ===
 bot.hears("🎬 Kino qo‘shish", (ctx) => {
   const uid = String(ctx.from.id);
-  if (!ADMINS.includes(uid)) return;
+  if (!ADMINS.includes(uid)) return; // faqat admin ishlatsin
   startAdminFlow(uid, "add_movie");
-  ctx.reply("Kino videosini yuboring (video fayl yoki telegram file_id bilan). Bekor qilish uchun '⛔ Bekor qilish' -ni bosing.");
+  ctx.reply("🎥 Kino videosini yuboring (video fayl yoki file_id). Bekor qilish uchun '⛔ Bekor qilish'.");
 });
 
-// Admin: Reklama
+// === Admin reklama tugmasi ===
 bot.hears("📢 Reklama yuborish", (ctx) => {
   const uid = String(ctx.from.id);
   if (!ADMINS.includes(uid)) return;
   startAdminFlow(uid, "add_ad");
-  ctx.reply("Reklama uchun rasm yoki video yuboring. Bekor qilish uchun '⛔ Bekor qilish' -ni bosing.");
+  ctx.reply("📢 Reklama uchun rasm yoki video yuboring. Bekor qilish uchun '⛔ Bekor qilish'.");
 });
 
-// Bekor qilish
+// === Bekor qilish tugmasi ===
 bot.hears("⛔ Bekor qilish", (ctx) => {
   const uid = String(ctx.from.id);
   if (ADMINS.includes(uid)) {
     clearAdminState(uid);
     ctx.reply("✅ Admin jarayoni bekor qilindi.", Markup.removeKeyboard());
   } else {
-    ctx.reply("Amal bekor qilindi.");
+    ctx.reply("❌ Amal bekor qilindi.");
   }
 });
+
+// === Media handler (faqat admin jarayonlari uchun) ===
+bot.on(["photo", "video", "document"], async (ctx) => {
+  const uid = String(ctx.from.id);
+  const state = getAdminState(uid);
+  if (!state || !ADMINS.includes(uid)) return; // oddiy foydalanuvchidan media kelgan bo‘lsa → e’tibor bermaymiz
+
+  if (state.mode === "add_movie" && !state.data.file_id) {
+    if (ctx.message.video) {
+      state.data.file_id = ctx.message.video.file_id;
+      state.step = 1;
+      return ctx.reply("🎬 Kino kodi kiriting (masalan: 1 yoki ABC123).");
+    } else if (ctx.message.document && ctx.message.document.mime_type.startsWith("video/")) {
+      state.data.file_id = ctx.message.document.file_id;
+      state.step = 1;
+      return ctx.reply("🎬 Kino kodi kiriting (masalan: 1 yoki ABC123).");
+    } else {
+      return ctx.reply("❌ Iltimos faqat video yuboring.");
+    }
+  }
+
+  if (state.mode === "add_ad" && !state.data.file_id) {
+    if (ctx.message.photo) {
+      const last = ctx.message.photo.pop();
+      state.data.file_id = last.file_id;
+      state.data.type = "photo";
+      state.step = 1;
+      return ctx.reply("📝 Reklama matnini kiriting:");
+    } else if (ctx.message.video) {
+      state.data.file_id = ctx.message.video.file_id;
+      state.data.type = "video";
+      state.step = 1;
+      return ctx.reply("📝 Reklama matnini kiriting:");
+    } else {
+      return ctx.reply("❌ Reklama uchun rasm yoki video yuboring.");
+    }
+  }
+});
+
+// === Text handler ===
+bot.on("text", async (ctx) => {
+  const uid = String(ctx.from.id);
+  const text = ctx.message.text.trim();
+
+  // --- 1) Admin jarayoni bo‘lsa faqat adminni ishlatamiz ---
+  const state = getAdminState(uid);
+  if (state && ADMINS.includes(uid)) {
+    if (state.mode === "add_movie") {
+      if (state.step === 1) {
+        state.data.code = text;
+        state.step = 2;
+        return ctx.reply("📝 Kinoga matn yozing (caption).");
+      } else if (state.step === 2) {
+        state.data.text = text;
+        state.step = 3;
+        return ctx.reply(
+          `📌 Kino ma'lumotlari:\nKod: ${state.data.code}\nMatn: ${state.data.text}\n\nTasdiqlaysizmi? (Ha / Yo'q)`
+        );
+      } else if (state.step === 3) {
+        if (["ha", "yes"].includes(text.toLowerCase())) {
+          const exists = MOVIES.find((m) => m.code === state.data.code);
+          if (exists) {
+            MOVIES = MOVIES.map((m) =>
+              m.code === state.data.code
+                ? { code: state.data.code, file_id: state.data.file_id, text: state.data.text }
+                : m
+            );
+          } else {
+            MOVIES.push({ code: state.data.code, file_id: state.data.file_id, text: state.data.text });
+          }
+          writeJSON(MOVIES_FILE, MOVIES);
+          clearAdminState(uid);
+          return ctx.reply("✅ Kino muvaffaqiyatli saqlandi.", Markup.removeKeyboard());
+        } else {
+          clearAdminState(uid);
+          return ctx.reply("❌ Kino qo‘shish bekor qilindi.", Markup.removeKeyboard());
+        }
+      }
+    }
+
+    if (state.mode === "add_ad") {
+      if (state.step === 1) {
+        state.data.text = text;
+        state.step = 2;
+        return ctx.reply("🔗 Tugma uchun matn|link yuboring (masalan: Saytimiz|https://example.com)");
+      } else if (state.step === 2) {
+        const [btnText, btnUrl] = text.split("|");
+        state.data.btnText = btnText;
+        state.data.btnUrl = btnUrl;
+        state.step = 3;
+        return ctx.reply(
+          `📢 Reklama tayyor:\nMatn: ${state.data.text}\nTugma: ${state.data.btnText} → ${state.data.btnUrl}\n\nTasdiqlaysizmi? (Ha / Yo'q)`
+        );
+      } else if (state.step === 3) {
+        if (["ha", "yes"].includes(text.toLowerCase())) {
+          // 🔥 Reklamani barcha userlarga yuboramiz
+          USERS.forEach((u) => {
+            const opts = {
+              caption: state.data.text,
+              reply_markup: {
+                inline_keyboard: [[{ text: state.data.btnText, url: state.data.btnUrl }]],
+              },
+            };
+            if (state.data.type === "photo") {
+              bot.telegram.sendPhoto(u, state.data.file_id, opts);
+            } else {
+              bot.telegram.sendVideo(u, state.data.file_id, opts);
+            }
+          });
+          clearAdminState(uid);
+          return ctx.reply("✅ Reklama yuborildi.");
+        } else {
+          clearAdminState(uid);
+          return ctx.reply("❌ Reklama bekor qilindi.");
+        }
+      }
+    }
+    return; // Admin jarayonida oddiy foydalanuvchi kod qismi ishlamasin
+  }
+
+  // --- 2) Oddiy foydalanuvchi (kino kodi qidirish) ---
+  const movie = MOVIES.find((m) => m.code === text);
+  if (movie) {
+    return ctx.replyWithVideo(movie.file_id, { caption: movie.text });
+  } else {
+    return ctx.reply("❌ Bu kod bo‘yicha kino topilmadi.");
+  }
+});
+
 
 // Media handler: photo / video (admin jarayoni uchun)
 bot.on(["photo", "video", "document"], async (ctx) => {
