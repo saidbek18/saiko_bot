@@ -1,233 +1,386 @@
-// ==============================
-// Telegram Kino Bot
-// To'liq yozilgan (500 qator atrofida)
-// ==============================
+/************************************************************
+ * Telegram Kino Bot — QISM 1/5 (≈100 qator)
+ * Poydevor: importlar, fayllar, util funklar, boshlang‘ich yuklash
+ ************************************************************/
 
+// 1) Kutubxonalar
 const { Telegraf, Markup } = require("telegraf");
 const fs = require("fs");
 const path = require("path");
 
-// ==============================
-// Configlar
-// ==============================
-
-// Tokeningizni shu yerga yozing
-const BOT_TOKEN = "7782418983:AAFw1FYb-ESFb-1abiSudFlzhukTAkylxFA"; 
+// 2) Config (TOKENNI ALMASHTIR!)
+const BOT_TOKEN = "7782418983:AAFw1FYb-ESFb-1abiSudFlzhukTAkylxFA"; // <-- tokeningiz
+if (!BOT_TOKEN) {
+  console.error("❌ BOT_TOKEN topilmadi. Iltimos kodga token yozing.");
+  process.exit(1);
+}
 const bot = new Telegraf(BOT_TOKEN);
 
-// Fayllar
-const adminsFile = path.join(__dirname, "admins.json");
-const channelsFile = path.join(__dirname, "channels.json");
-const moviesFile = path.join(__dirname, "movies.json");
-const usersFile = path.join(__dirname, "users.json");
+// 3) Fayl yo'llari
+const DATA_DIR = __dirname;
+const ADMINS_FILE   = path.join(DATA_DIR, "admins.json");
+const CHANNELS_FILE = path.join(DATA_DIR, "channels.json");
+const MOVIES_FILE   = path.join(DATA_DIR, "movies.json");
+const USERS_FILE    = path.join(DATA_DIR, "users.json");
+const STATE_FILE    = path.join(DATA_DIR, "state.json");   // adminlar uchun jarayon holati
 
-// JSON o‘qish funksiyasi
-function readJSON(file, def = []) {
-    try {
-        if (fs.existsSync(file)) {
-            return JSON.parse(fs.readFileSync(file));
-        } else {
-            return def;
-        }
-    } catch (e) {
-        console.log("JSON o‘qishda xatolik:", file, e);
-        return def;
-    }
+// 4) JSON helperlari
+function readJSON(file, defVal) {
+  try {
+    if (!fs.existsSync(file)) return defVal;
+    const raw = fs.readFileSync(file, "utf8");
+    if (!raw.trim()) return defVal;
+    return JSON.parse(raw);
+  } catch (e) {
+    console.error("JSON o‘qishda xato:", file, e.message);
+    return defVal;
+  }
 }
 
-// JSON yozish
 function writeJSON(file, data) {
-    fs.writeFileSync(file, JSON.stringify(data, null, 2));
-}
-
-// ==============================
-// Fayllarni boshlang‘ich holatga keltirish
-// ==============================
-let admins = readJSON(adminsFile, ["123456789"]); // admin ID shu yerga
-let channels = readJSON(channelsFile, [
-    { id: "@example1", name: "Kanal 1" },
-    { id: "@example2", name: "Kanal 2" }
-]);
-let movies = readJSON(moviesFile, []);
-let users = readJSON(usersFile, []);
-
-// ==============================
-// Obuna tekshirish funksiyasi
-// ==============================
-async function checkSubscription(ctx) {
-    let userId = ctx.from.id;
-    for (let ch of channels) {
-        try {
-            let res = await ctx.telegram.getChatMember(ch.id, userId);
-            if (["left", "kicked"].includes(res.status)) {
-                return false;
-            }
-        } catch (e) {
-            console.log("Kanal topilmadi:", ch.id, e);
-            return false;
-        }
-    }
+  try {
+    fs.writeFileSync(file, JSON.stringify(data, null, 2), "utf8");
     return true;
+  } catch (e) {
+    console.error("JSON yozishda xato:", file, e.message);
+    return false;
+  }
 }
 
-// Kanal tugmalari
-function channelButtons() {
-    return channels.map(ch => [Markup.button.url(ch.name, `https://t.me/${ch.id.replace("@", "")}`)]);
+// 5) Dastlabki ma'lumotlarni yuklash
+let ADMINS   = readJSON(ADMINS_FILE,   ["8165064673"]);   // default admin ID (string)
+let CHANNELS = readJSON(CHANNELS_FILE, ["@saikostars"]);  // kanal usernamelari
+let MOVIES   = readJSON(MOVIES_FILE,   {});               // { "kod": "file_id" | {file_id, caption} }
+let USERS    = readJSON(USERS_FILE,    {});               // { userId: { subscribed: bool, ... } }
+let STATE    = readJSON(STATE_FILE,    {});               // { adminId: { mode, step, ... } }
+
+// 6) Ma'lumotlarni normallashtirish (xavfsiz holat)
+if (!Array.isArray(ADMINS)) ADMINS = [];
+if (!Array.isArray(CHANNELS)) CHANNELS = [];
+if (typeof MOVIES !== "object" || Array.isArray(MOVIES)) MOVIES = {};
+if (typeof USERS  !== "object" || Array.isArray(USERS))  USERS  = {};
+if (typeof STATE  !== "object" || Array.isArray(STATE))  STATE  = {};
+
+// 7) Kichik util funktsiyalar
+const isAdmin = (ctx) => ADMINS.includes(String(ctx.from?.id || "")));
+
+function ensureUser(userId, defaults = {}) {
+  const uid = String(userId);
+  if (!USERS[uid]) {
+    USERS[uid] = { subscribed: false, createdAt: Date.now(), ...defaults };
+    writeJSON(USERS_FILE, USERS);
+  }
+  return USERS[uid];
 }
 
-// ==============================
-// Start komandasi
-// ==============================
+function setUser(userId, patch) {
+  const uid = String(userId);
+  USERS[uid] = { ...(USERS[uid] || {}), ...patch };
+  writeJSON(USERS_FILE, USERS);
+  return USERS[uid];
+}
+
+// 8) Kanal tugmalari (inline)
+function channelKeyboard() {
+  const rows = CHANNELS.map((ch) => {
+    const url = `https://t.me/${String(ch).replace("@", "")}`;
+    return [Markup.button.url(String(ch), url)];
+  });
+  rows.push([Markup.button.callback("✅ Tekshirish", "check_subs")]);
+  return Markup.inlineKeyboard(rows);
+}
+
+// 9) Obuna tekshirish (haqiqiy)
+async function notSubscribedChannels(ctx, userId = null) {
+  const uid = userId || ctx.from?.id;
+  if (!uid) return CHANNELS.slice();
+  const missing = [];
+  for (const ch of CHANNELS) {
+    try {
+      const res = await ctx.telegram.getChatMember(ch, uid);
+      const st = res?.status;
+      if (!["member", "creator", "administrator"].includes(st)) missing.push(ch);
+    } catch (e) {
+      // Kanal yopiq yoki bot a'zo emas — tekshira olmadik, xavfsizlik uchun missingga qo‘shamiz
+      missing.push(ch);
+    }
+  }
+  return missing;
+}
+
+// 10) Admin holati (state) boshqaruvi
+function startState(adminId, payload) {
+  STATE[String(adminId)] = { step: 0, mode: null, data: {}, ...payload };
+  writeJSON(STATE_FILE, STATE);
+}
+
+function patchState(adminId, patch) {
+  const uid = String(adminId);
+  STATE[uid] = { ...(STATE[uid] || {}), ...patch };
+  writeJSON(STATE_FILE, STATE);
+  return STATE[uid];
+}
+
+function clearState(adminId) {
+  delete STATE[String(adminId)];
+  writeJSON(STATE_FILE, STATE);
+}
+
+// ——— QISM 1 yakunlandi ———
+/************************************************************
+ * Telegram Kino Bot — QISM 2/5 (≈100 qator)
+ * Start, obuna tekshirish, admin menyu, bekor qilish
+ ************************************************************/
+
+// 11) /start — foydalanuvchini kutib olish va kanallar ro‘yxatini berish
 bot.start(async (ctx) => {
-    let userId = ctx.from.id;
-    let name = ctx.from.first_name;
+  try {
+    const uid = String(ctx.from.id);
+    ensureUser(uid);
 
-    // Foydalanuvchini bazaga yozish
-    if (!users.find(u => u.id === userId)) {
-        users.push({ id: userId, name: name });
-        writeJSON(usersFile, users);
-    }
+    // Foydalanuvchini “subscribed: false” qilib qo‘yamiz (tekshirguncha)
+    setUser(uid, { subscribed: false, first_name: ctx.from.first_name || "", username: ctx.from.username || "" });
 
-    ctx.reply(`Salom, ${name}! 🎬\nBotdan foydalanish uchun avval kanallarga obuna bo‘ling.`, {
-        reply_markup: {
-            inline_keyboard: [
-                ...channelButtons(),
-                [Markup.button.callback("✅ Obunani tekshirish", "check_subs")]
-            ]
-        }
-    });
-});
+    // Kanal tugmalari bilan chaqiramiz
+    await ctx.reply(
+      `Salom, ${ctx.from.first_name || "do‘st"}!\n\n` +
+      `Botdan foydalanish uchun quyidagi kanallarga obuna bo‘ling, so‘ng “✅ Tekshirish” tugmasini bosing.`,
+      channelKeyboard()
+    );
 
-// ==============================
-// Obunani tekshirish tugmasi
-// ==============================
-bot.action("check_subs", async (ctx) => {
-    let isSub = await checkSubscription(ctx);
-    if (isSub) {
-        ctx.reply("✅ Obuna tasdiqlandi!\nEndi kino kodini yuboring:");
+    // Agar admin bo‘lsa, admin menyusini reply keyboard qilib beramiz
+    if (isAdmin(ctx)) {
+      await ctx.reply(
+        "Admin panel:",
+        Markup.keyboard([
+          ["🎬 Kino qo‘shish", "📢 Reklama yuborish"],
+          ["📊 Statistika", "⚙️ Sozlamalar"],
+          ["⛔ Bekor qilish"]
+        ]).resize()
+      );
     } else {
-        ctx.reply("❌ Siz barcha kanallarga obuna bo‘lmadingiz.\nIltimos, obuna bo‘ling:", {
-            reply_markup: {
-                inline_keyboard: [
-                    ...channelButtons(),
-                    [Markup.button.callback("♻️ Qayta tekshirish", "check_subs")]
-                ]
-            }
-        });
+      // Oddiy foydalanuvchi uchun reply keyboardni olib tashlaymiz — faqat inline ishlaydi
+      await ctx.reply("🎬 Kino kodini yuborishingiz mumkin (obuna tasdiqlangach).", Markup.removeKeyboard());
     }
+  } catch (e) {
+    console.error("start error:", e);
+    await ctx.reply("Xatolik yuz berdi. Keyinroq urinib ko‘ring.");
+  }
 });
 
-// ==============================
-// Kino kodini yuborish
-// ==============================
+// 12) Tekshirish (callback orqali) — “✅ Tekshirish” tugmasi
+bot.action("check_subs", async (ctx) => {
+  try {
+    await ctx.answerCbQuery(); // loading tugadi
+    const uid = String(ctx.from.id);
+    ensureUser(uid);
+
+    const missing = await notSubscribedChannels(ctx, uid);
+    if (missing.length > 0) {
+      // Hali hammasiga obuna bo‘lmagan
+      const rows = missing.map((ch) => {
+        const url = `https://t.me/${String(ch).replace("@", "")}`;
+        return [Markup.button.url(`${ch} ga obuna bo‘lish`, url)];
+      });
+      rows.push([Markup.button.callback("✅ Yana tekshirish", "check_subs")]);
+
+      // oldingi xabarni yangilashga urinamiz
+      try {
+        await ctx.editMessageText(
+          "Hali hammasiga obuna bo‘lmadingiz. Iltimos quyidagilarga a‘zo bo‘ling:",
+          Markup.inlineKeyboard(rows)
+        );
+      } catch {
+        await ctx.reply(
+          "Hali hammasiga obuna bo‘lmadingiz. Iltimos quyidagilarga a‘zo bo‘ling:",
+          Markup.inlineKeyboard(rows)
+        );
+      }
+      return;
+    }
+
+    // Obuna to‘liq — foydalanuvchini “subscribed: true” qilamiz
+    setUser(uid, { subscribed: true });
+
+    // Oldingi xabarni tasdiqlashga harakat qilamiz
+    try { await ctx.editMessageText("✅ Obuna tasdiqlandi!"); } catch {}
+
+    // Endi kino kodini so‘raymiz
+    await ctx.reply("✅ Obuna tasdiqlandi!\n\nEndi kino kodini yuboring (masalan: 1001).");
+  } catch (e) {
+    console.error("check_subs error:", e);
+    await ctx.reply("Tekshirishda xatolik. Keyinroq urinib ko‘ring.");
+  }
+});
+
+// 13) /check — fallback (agar foydalanuvchi slash bilan yozsa)
+bot.command("check", async (ctx) => {
+  try {
+    const uid = String(ctx.from.id);
+    ensureUser(uid);
+    const missing = await notSubscribedChannels(ctx, uid);
+    if (missing.length > 0) {
+      return ctx.reply(
+        "Hali ham obuna to‘liq emas. Iltimos quyidagilarga a‘zo bo‘ling va yana /check yuboring:",
+        channelKeyboard()
+      );
+    }
+    setUser(uid, { subscribed: true });
+    await ctx.reply("✅ Obuna tasdiqlandi! Endi kino kodini yuboring.");
+  } catch (e) {
+    console.error("/check error:", e);
+    await ctx.reply("Xatolik yuz berdi. Keyinroq urinib ko‘ring.");
+  }
+});
+
+// 14) /admin — faqat adminlarga ko‘rinadigan bosh menyu
+bot.command("admin", async (ctx) => {
+  if (!isAdmin(ctx)) return;
+  await ctx.reply(
+    "Admin panel:",
+    Markup.keyboard([
+      ["🎬 Kino qo‘shish", "📢 Reklama yuborish"],
+      ["📊 Statistika", "⚙️ Sozlamalar"],
+      ["⛔ Bekor qilish"]
+    ]).resize()
+  );
+});
+
+// 15) Bekor qilish — har qanday admin jarayonini to‘xtatadi
+bot.hears("⛔ Bekor qilish", async (ctx) => {
+  const uid = String(ctx.from.id);
+  if (isAdmin(ctx)) {
+    clearState(uid);
+    await ctx.reply("✅ Admin jarayoni bekor qilindi.", Markup.removeKeyboard());
+    // Admin menyusini qaytadan beramiz
+    await ctx.reply(
+      "Admin panel:",
+      Markup.keyboard([
+        ["🎬 Kino qo‘shish", "📢 Reklama yuborish"],
+        ["📊 Statistika", "⚙️ Sozlamalar"],
+        ["⛔ Bekor qilish"]
+      ]).resize()
+    );
+  } else {
+    await ctx.reply("Bekor qilindi.", Markup.removeKeyboard());
+  }
+});
+
+// 16) Oddiy yordamchi komandalar
+bot.command("help", async (ctx) => {
+  await ctx.reply(
+    "Yordam:\n" +
+    "— /start — boshlash\n" +
+    "— /check — obunani tekshirish\n" +
+    "— Kino kodini yuboring: masalan, 1001\n" +
+    (isAdmin(ctx) ? "— /admin — admin panel\n" : "")
+  );
+});
+
+// 17) Har qanday xato uchun global catcher (qoladi)
+bot.catch((err) => {
+  console.error("Bot xato:", err);
+});
+
+// ——— QISM 2 yakunlandi ———
+// ====== 3-QISM ======
+
+// /admin panelga kirish
+bot.command("admin", async (ctx) => {
+  if (!admins.includes(ctx.from.id.toString())) {
+    return ctx.reply("❌ Siz admin emassiz!");
+  }
+
+  return ctx.reply(
+    "✅ Admin panelga xush kelibsiz!",
+    Markup.inlineKeyboard([
+      [Markup.button.callback("🎬 Kino qo‘shish", "add_movie")],
+      [Markup.button.callback("📂 Kinolar ro‘yxati", "list_movies")],
+      [Markup.button.callback("📢 Reklama yuborish", "send_ads")],
+    ])
+  );
+});
+
+// Kino qo‘shish tugmasi
+bot.action("add_movie", async (ctx) => {
+  if (!admins.includes(ctx.from.id.toString())) return;
+  ctx.session = ctx.session || {};
+  ctx.session.addingMovie = true;
+  await ctx.reply("🎬 Kino qo‘shish uchun: Kino nomi | Kino kodi formatida yuboring.");
+});
+
+// Kinolar ro‘yxati
+bot.action("list_movies", async (ctx) => {
+  if (!admins.includes(ctx.from.id.toString())) return;
+  let movies = JSON.parse(fs.readFileSync("movies.json"));
+  if (movies.length === 0) return ctx.reply("❌ Hozircha kino qo‘shilmagan!");
+
+  let text = "🎬 Kinolar ro‘yxati:\n\n";
+  movies.forEach((m, i) => {
+    text += `${i + 1}) ${m.name} — <code>${m.code}</code>\n`;
+  });
+
+  ctx.reply(text, { parse_mode: "HTML" });
+});
+
+// Reklama yuborish
+bot.action("send_ads", async (ctx) => {
+  if (!admins.includes(ctx.from.id.toString())) return;
+  ctx.session = ctx.session || {};
+  ctx.session.sendingAds = true;
+  await ctx.reply("📢 Reklama matnini yuboring:");
+});
+
+// Kino kodini tasdiqlash
 bot.on("text", async (ctx) => {
-    let userId = ctx.from.id;
-    let text = ctx.message.text.trim();
+  ctx.session = ctx.session || {};
 
-    // Admin komandalarini ajratib olish
-    if (admins.includes(userId.toString())) {
-        if (text.startsWith("/addmovie")) {
-            let args = text.split(" ");
-            if (args.length < 3) {
-                return ctx.reply("❌ Foydalanish: /addmovie KOD LINK");
-            }
-            let code = args[1];
-            let link = args[2];
-            movies.push({ code: code, link: link });
-            writeJSON(moviesFile, movies);
-            return ctx.reply(`✅ Kino qo‘shildi!\nKod: ${code}\nLink: ${link}`);
-        }
+  // Agar admin kino qo‘shayotgan bo‘lsa
+  if (ctx.session.addingMovie && admins.includes(ctx.from.id.toString())) {
+    let parts = ctx.message.text.split("|");
+    if (parts.length !== 2) {
+      return ctx.reply("❌ Xato format! Kino nomi | Kino kodi shaklida yuboring.");
+    }
+    let name = parts[0].trim();
+    let code = parts[1].trim();
 
-        if (text.startsWith("/delmovie")) {
-            let args = text.split(" ");
-            if (args.length < 2) {
-                return ctx.reply("❌ Foydalanish: /delmovie KOD");
-            }
-            let code = args[1];
-            movies = movies.filter(m => m.code !== code);
-            writeJSON(moviesFile, movies);
-            return ctx.reply(`🗑 Kino o‘chirildi!\nKod: ${code}`);
-        }
+    let movies = JSON.parse(fs.readFileSync("movies.json"));
+    movies.push({ name, code });
+    fs.writeFileSync("movies.json", JSON.stringify(movies, null, 2));
 
-        if (text.startsWith("/movies")) {
-            if (movies.length === 0) return ctx.reply("🎬 Hech qanday kino yo‘q.");
-            let msg = "🎬 Kinolar ro‘yxati:\n\n";
-            movies.forEach(m => {
-                msg += `🔹 Kod: ${m.code}\n🔗 Link: ${m.link}\n\n`;
-            });
-            return ctx.reply(msg);
-        }
+    ctx.session.addingMovie = false;
+    return ctx.reply(`✅ Kino qo‘shildi:\n🎬 ${name}\n📌 Kod: ${code}`);
+  }
+
+  // Agar admin reklama yuborayotgan bo‘lsa
+  if (ctx.session.sendingAds && admins.includes(ctx.from.id.toString())) {
+    let users = JSON.parse(fs.readFileSync("users.json"));
+    let msg = ctx.message.text;
+
+    for (let userId of users) {
+      try {
+        await bot.telegram.sendMessage(userId, `📢 Reklama:\n\n${msg}`);
+      } catch (e) {
+        console.log("Xatolik:", e.message);
+      }
     }
 
-    // Oddiy foydalanuvchi uchun
-    let isSub = await checkSubscription(ctx);
-    if (!isSub) {
-        return ctx.reply("❌ Siz hali barcha kanallarga obuna bo‘lmadingiz.", {
-            reply_markup: {
-                inline_keyboard: [
-                    ...channelButtons(),
-                    [Markup.button.callback("♻️ Qayta tekshirish", "check_subs")]
-                ]
-            }
-        });
-    }
+    ctx.session.sendingAds = false;
+    return ctx.reply("✅ Reklama yuborildi!");
+  }
 
-    // Kino kodini qidirish
-    let movie = movies.find(m => m.code === text);
-    if (!movie) {
-        return ctx.reply("❌ Bunday kodli kino topilmadi.");
-    }
+  // Oddiy foydalanuvchi kino kodi yuborsa
+  let movies = JSON.parse(fs.readFileSync("movies.json"));
+  let movie = movies.find((m) => m.code === ctx.message.text.trim());
 
-    ctx.reply(`🎬 Mana siz so‘ragan kino:\n\n🔗 ${movie.link}`);
+  if (movie) {
+    return ctx.reply(
+      `🎬 Siz tanlagan kino: <b>${movie.name}</b>\n📌 Kod: <code>${movie.code}</code>\n\n✅ Tomosha qilish uchun tayyor!`,
+      { parse_mode: "HTML" }
+    );
+  }
 });
 
-// ==============================
-// Admin panel tugmalari
-// ==============================
-bot.command("admin", (ctx) => {
-    if (!admins.includes(ctx.from.id.toString())) {
-        return ctx.reply("❌ Siz admin emassiz.");
-    }
-
-    ctx.reply("👮 Admin panel:", {
-        reply_markup: {
-            inline_keyboard: [
-                [Markup.button.callback("🎬 Kinolar ro‘yxati", "list_movies")],
-                [Markup.button.callback("➕ Kino qo‘shish", "add_movie_help")],
-                [Markup.button.callback("🗑 Kino o‘chirish", "del_movie_help")]
-            ]
-        }
-    });
-});
-
-// ==============================
-// Admin panel actionlari
-// ==============================
-bot.action("list_movies", (ctx) => {
-    if (!admins.includes(ctx.from.id.toString())) return;
-    if (movies.length === 0) return ctx.reply("🎬 Hozircha kino yo‘q.");
-    let msg = "🎬 Kinolar:\n\n";
-    movies.forEach(m => msg += `🔹 ${m.code} -> ${m.link}\n`);
-    ctx.reply(msg);
-});
-
-bot.action("add_movie_help", (ctx) => {
-    if (!admins.includes(ctx.from.id.toString())) return;
-    ctx.reply("➕ Kino qo‘shish uchun:\n\n`/addmovie KOD LINK`");
-});
-
-bot.action("del_movie_help", (ctx) => {
-    if (!admins.includes(ctx.from.id.toString())) return;
-    ctx.reply("🗑 Kino o‘chirish uchun:\n\n`/delmovie KOD`");
-});
-
-// ==============================
 // Botni ishga tushirish
-// ==============================
 bot.launch();
-console.log("🎬 Kino Bot ishga tushdi...");
-
-// Graceful stop
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
-
+console.log("🚀 Bot ishga tushdi!");
