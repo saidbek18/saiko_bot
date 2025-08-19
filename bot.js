@@ -183,7 +183,6 @@ bot.action("check_subs", async (ctx) => {
       });
       rows.push([Markup.button.callback("✅ Yana tekshirish", "check_subs")]);
 
-      // oldingi xabarni yangilashga urinamiz
       try {
         await ctx.editMessageText(
           "Hali hammasiga obuna bo‘lmadingiz. Iltimos quyidagilarga a‘zo bo‘ling:",
@@ -198,14 +197,17 @@ bot.action("check_subs", async (ctx) => {
       return;
     }
 
-    // Obuna to‘liq — foydalanuvchini “subscribed: true” qilamiz
+    // ✅ Obuna to‘liq — foydalanuvchini “subscribed: true” qilamiz
     setUser(uid, { subscribed: true });
 
     // Oldingi xabarni tasdiqlashga harakat qilamiz
     try { await ctx.editMessageText("✅ Obuna tasdiqlandi!"); } catch {}
 
-    // Endi kino kodini so‘raymiz
-    await ctx.reply("✅ Obuna tasdiqlandi!\n\nEndi kino kodini yuboring (masalan: 1001).");
+    // 🔑 Salomlashib, kod so‘raymiz
+    await ctx.reply(
+      `✅ Obuna tasdiqlandi!\n\nSalom, *${ctx.from.first_name || ctx.from.username || "do‘st"}* 👋\nEndi kino kodini yuboring (masalan: 1001).`,
+      { parse_mode: "Markdown" }
+    );
   } catch (e) {
     console.error("check_subs error:", e);
     await ctx.reply("Tekshirishda xatolik. Keyinroq urinib ko‘ring.");
@@ -224,13 +226,18 @@ bot.command("check", async (ctx) => {
         channelKeyboard()
       );
     }
+
     setUser(uid, { subscribed: true });
-    await ctx.reply("✅ Obuna tasdiqlandi! Endi kino kodini yuboring.");
+    await ctx.reply(
+      `✅ Obuna tasdiqlandi!\n\nSalom, *${ctx.from.first_name || ctx.from.username || "do‘st"}* 👋\nEndi kino kodini yuboring (masalan: 1001).`,
+      { parse_mode: "Markdown" }
+    );
   } catch (e) {
     console.error("/check error:", e);
     await ctx.reply("Xatolik yuz berdi. Keyinroq urinib ko‘ring.");
   }
 });
+
 
 // 14) /admin — faqat adminlarga ko‘rinadigan bosh menyu
 bot.command("admin", async (ctx) => {
@@ -293,61 +300,83 @@ bot.catch((err) => {
  * Kino qo‘shish va chiqarish funksiyalari
  ************************************************************/
 
-// 1) Kino qo‘shish
+// ❌ Eski joylarda movies ishlatilgan — bularni olib tashlaymiz
+// let movies = ...
+// movies.push(newKino);
+// movies.forEach(...)
+
+// ✅ Faqat MOVIES obyektidan foydalanamiz
+
+// 1) Kino qo‘shish komandasi
 bot.command("addkino", async (ctx) => {
-  if (!admins.includes(String(ctx.from.id))) {
+  if (!isAdmin(ctx)) {
     return ctx.reply("⛔ Siz admin emassiz!");
   }
-  ctx.reply("🎬 Kino nomini yuboring:");
+
+  ctx.reply("🎬 Kino uchun kod yuboring (masalan: 1001):");
 
   bot.once("text", async (ctx2) => {
-    let kinoNom = ctx2.message.text;
+    const code = ctx2.message.text.trim();
 
-    ctx2.reply("📎 Kino linkini yuboring:");
-    bot.once("text", async (ctx3) => {
-      let kinoLink = ctx3.message.text;
+    ctx2.reply("📎 Kino videosini yuboring:");
+    bot.once("video", async (ctx3) => {
+      const file_id = ctx3.message.video.file_id;
 
-      let newKino = { nom: kinoNom, link: kinoLink };
-      movies.push(newKino);
+      ctx3.reply("✍️ Kino matnini yuboring:");
+      bot.once("text", async (ctx4) => {
+        const caption = ctx4.message.text;
 
-      fs.writeFileSync("movies.json", JSON.stringify(movies, null, 2));
+        MOVIES[code] = { file_id, caption };
+        writeJSON(MOVIES_FILE, MOVIES);
 
-      ctx3.reply(
-        `✅ Kino qo‘shildi!\n\n🎬 Nomi: ${kinoNom}\n🔗 Link: ${kinoLink}`
-      );
+        ctx4.reply(
+          `✅ Kino qo‘shildi!\n\n📌 Kod: ${code}\n🎬 Matn: ${caption}`
+        );
+      });
     });
   });
 });
 
-// 2) Kinolar ro‘yxatini chiqarish
-bot.command("kinolar", async (ctx) => {
-  if (movies.length === 0) {
-    return ctx.reply("📭 Hozircha kinolar qo‘shilmagan.");
+// 2) /kinolar komandasi (hamma kinolarni chiqarish)
+bot.command("kinolar", (ctx) => {
+  try {
+    const keys = Object.keys(MOVIES);
+    if (keys.length === 0) {
+      return ctx.reply("📭 Hozircha kinolar qo‘shilmagan.");
+    }
+
+    let text = "🎬 Kinolar ro‘yxati:\n\n";
+    keys.forEach((code, i) => {
+      const m = MOVIES[code];
+      text += `${i + 1}. Kod: ${code}\n📌 ${m.caption || "Matn yo‘q"}\n\n`;
+    });
+
+    ctx.reply(text);
+  } catch (err) {
+    console.error("Kinolarni chiqarishda xato:", err);
+    ctx.reply("❌ Xatolik yuz berdi, keyinroq urinib ko‘ring.");
+  }
+});
+
+// 3) /kino [kod] komandasi
+bot.command("kino", (ctx) => {
+  const args = ctx.message.text.split(" ");
+  if (args.length < 2) {
+    return ctx.reply("ℹ️ Iltimos kino kodini kiriting. Masalan:\n/kino 1001");
   }
 
-  let text = "🎬 Kinolar ro‘yxati:\n\n";
-  movies.forEach((kino, i) => {
-    text += `${i + 1}. ${kino.nom}\n🔗 ${kino.link}\n\n`;
+  const code = args[1];
+  const movie = MOVIES[code];
+
+  if (!movie) {
+    return ctx.reply("❌ Bunday kodli kino topilmadi.");
+  }
+
+  ctx.replyWithVideo(movie.file_id, {
+    caption: movie.caption || `🎬 Kod: ${code}`
   });
-
-  ctx.reply(text);
 });
 
-// 3-bosqich: Caption olish va saqlash
-bot.on("text", async (ctx, next) => {
-  const uid = String(ctx.from.id);
-  const st = STATE[uid];
-  if (!st || st.mode !== "add_movie" || st.step !== 3) return next();
-
-  const caption = ctx.message.text;
-  const { file_id, code } = st.data;
-
-  MOVIES[code] = { file_id, caption };
-  writeJSON(MOVIES_FILE, MOVIES);
-
-  clearState(uid);
-  return ctx.reply(`✅ Kino muvaffaqiyatli qo‘shildi!\n📌 Kod: ${code}`);
-});
 
 // === Reklama yuborish ===
 bot.hears("📢 Reklama yuborish", async (ctx) => {
