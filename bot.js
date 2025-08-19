@@ -19,6 +19,7 @@ const bot = new Telegraf(BOT_TOKEN);
 // 3) Fayl yo'llari
 const DATA_DIR = __dirname;
 const ADMINS_FILE   = path.join(DATA_DIR, "admins.json");
+process.once("SIGTERM", () => bot.stop("SIGTERM"));
 const CHANNELS_FILE = path.join(DATA_DIR, "channels.json");
 const MOVIES_FILE   = path.join(DATA_DIR, "movies.json");
 const USERS_FILE    = path.join(DATA_DIR, "users.json");
@@ -62,7 +63,7 @@ if (typeof USERS  !== "object" || Array.isArray(USERS))  USERS  = {};
 if (typeof STATE  !== "object" || Array.isArray(STATE))  STATE  = {};
 
 // 7) Kichik util funktsiyalar
-const isAdmin = (ctx) => ADMINS.includes(String(ctx.from?.id || "")));
+const isAdmin = (ctx) => ADMINS.includes(String(ctx.from?.id || ""));
 
 function ensureUser(userId, defaults = {}) {
   const uid = String(userId);
@@ -153,9 +154,7 @@ bot.start(async (ctx) => {
       await ctx.reply(
         "Admin panel:",
         Markup.keyboard([
-          ["🎬 Kino qo‘shish", "📢 Reklama yuborish"],
-          ["📊 Statistika", "⚙️ Sozlamalar"],
-          ["⛔ Bekor qilish"]
+          ["🎬 Kino qo‘shish", "📢 Reklama yuborish"]
         ]).resize()
       );
     } else {
@@ -284,97 +283,128 @@ bot.catch((err) => {
 
 // ——— QISM 2 yakunlandi ———
 // ====== 3-QISM ======
-
 /************************************************************
  * Telegram Kino Bot — QISM 3/5 (≈100 qator)
- * Admin: Kino qo‘shish, ro‘yxatlash, reklama
+ * Admin: Kino qo‘shish (video → kod → matn)
+ * Reklama yuborish (rasm → matn → tugma nomi → tugma linki)
  ************************************************************/
 
-// 18) Admin: "🎬 Kino qo‘shish"
+// === Kino qo‘shish ===
 bot.hears("🎬 Kino qo‘shish", async (ctx) => {
   if (!isAdmin(ctx)) return;
-  startState(ctx.from.id, { mode: "add_movie", step: 1 });
-  await ctx.reply("🎬 Kino kodi va fayl yuboring.\n\nMasalan: 1001 (kodni yuboring).");
+  startState(ctx.from.id, { mode: "add_movie", step: 1, data: {} });
+  await ctx.reply("🎬 Iltimos kino videosini yuboring:");
 });
 
-// 19) Admin: Kino qo‘shish — kodni yuborish
+// 1-bosqich: Video olish
+bot.on("video", async (ctx, next) => {
+  const uid = String(ctx.from.id);
+  const st = STATE[uid];
+  if (!st || st.mode !== "add_movie" || st.step !== 1) return next();
+
+  const file_id = ctx.message.video.file_id;
+  patchState(uid, { step: 2, data: { file_id } });
+  return ctx.reply("✅ Video qabul qilindi.\n\nEndi kino uchun KOD yuboring (masalan: 1001).");
+});
+
+// 2-bosqich: Kod olish
 bot.on("text", async (ctx, next) => {
   const uid = String(ctx.from.id);
   const st = STATE[uid];
-
-  if (!st || st.mode !== "add_movie") return next();
-
-  if (st.step === 1) {
-    const code = ctx.message.text.trim();
-    if (MOVIES[code]) {
-      return ctx.reply("❌ Bu kod allaqachon mavjud. Boshqa kod kiriting.");
-    }
-    patchState(uid, { step: 2, data: { code } });
-    return ctx.reply("✅ Kod qabul qilindi.\n\nEndi kino faylini yuboring (video, document, photo).");
-  }
-
-  return next();
-});
-
-// 20) Admin: Kino faylini qabul qilish
-bot.on(["video", "document", "photo"], async (ctx, next) => {
-  const uid = String(ctx.from.id);
-  const st = STATE[uid];
-
   if (!st || st.mode !== "add_movie" || st.step !== 2) return next();
 
-  const code = st.data.code;
-  let file_id = null;
+  const code = ctx.message.text.trim();
+  if (MOVIES[code]) {
+    return ctx.reply("❌ Bu kod allaqachon mavjud. Boshqa kod yuboring.");
+  }
 
-  if (ctx.message.video) file_id = ctx.message.video.file_id;
-  else if (ctx.message.document) file_id = ctx.message.document.file_id;
-  else if (ctx.message.photo) file_id = ctx.message.photo.pop().file_id;
+  patchState(uid, { step: 3, data: { ...st.data, code } });
+  return ctx.reply("✅ Kod qabul qilindi.\n\nEndi kino uchun matn (caption) yuboring:");
+});
 
-  if (!file_id) return ctx.reply("❌ Faylni aniqlab bo‘lmadi. Video, document yoki photo yuboring.");
+// 3-bosqich: Caption olish va saqlash
+bot.on("text", async (ctx, next) => {
+  const uid = String(ctx.from.id);
+  const st = STATE[uid];
+  if (!st || st.mode !== "add_movie" || st.step !== 3) return next();
 
-  MOVIES[code] = { file_id, caption: ctx.message.caption || "" };
+  const caption = ctx.message.text;
+  const { file_id, code } = st.data;
+
+  MOVIES[code] = { file_id, caption };
   writeJSON(MOVIES_FILE, MOVIES);
 
   clearState(uid);
-
-  await ctx.reply(`✅ Kino muvaffaqiyatli qo‘shildi!\n📌 Kod: ${code}`);
+  return ctx.reply(`✅ Kino muvaffaqiyatli qo‘shildi!\n📌 Kod: ${code}`);
 });
 
-// 21) Admin: "📂 Kinolar ro‘yxati"
-bot.hears("📂 Kinolar ro‘yxati", async (ctx) => {
-  if (!isAdmin(ctx)) return;
-  const codes = Object.keys(MOVIES);
-  if (codes.length === 0) return ctx.reply("❌ Hozircha kino yo‘q.");
-
-  let text = "🎬 Kinolar ro‘yxati:\n\n";
-  codes.forEach((c, i) => {
-    text += `${i + 1}) Kod: <code>${c}</code>\n`;
-  });
-
-  await ctx.reply(text, { parse_mode: "HTML" });
-});
-
-// 22) Admin: "📢 Reklama yuborish"
+// === Reklama yuborish ===
 bot.hears("📢 Reklama yuborish", async (ctx) => {
   if (!isAdmin(ctx)) return;
-  startState(ctx.from.id, { mode: "send_ads", step: 1 });
-  await ctx.reply("📢 Reklama matnini yuboring:");
+  startState(ctx.from.id, { mode: "send_ads", step: 1, data: {} });
+  await ctx.reply("📢 Reklama uchun rasm yuboring yoki /skip bu bosqichni o‘tkazing.");
 });
 
-// 23) Admin: Reklama matnini qabul qilish va jo‘natish
+// 1-bosqich: Rasm olish yoki skip
+bot.on("photo", async (ctx, next) => {
+  const uid = String(ctx.from.id);
+  const st = STATE[uid];
+  if (!st || st.mode !== "send_ads" || st.step !== 1) return next();
+
+  const file_id = ctx.message.photo.pop().file_id;
+  patchState(uid, { step: 2, data: { photo: file_id } });
+  return ctx.reply("✅ Rasm qabul qilindi.\n\nEndi reklama matnini yuboring:");
+});
+
+bot.command("skip", async (ctx) => {
+  const uid = String(ctx.from.id);
+  const st = STATE[uid];
+  if (!st || st.mode !== "send_ads" || st.step !== 1) return;
+  patchState(uid, { step: 2, data: {} });
+  return ctx.reply("⏩ Rasm bosqichi o‘tkazildi.\n\nEndi reklama matnini yuboring:");
+});
+
+// 2-bosqich: Matn olish
 bot.on("text", async (ctx, next) => {
   const uid = String(ctx.from.id);
   const st = STATE[uid];
+  if (!st || st.mode !== "send_ads" || st.step !== 2) return next();
 
-  if (!st || st.mode !== "send_ads") return next();
+  patchState(uid, { step: 3, data: { ...st.data, text: ctx.message.text } });
+  return ctx.reply("✍️ Endi tugma uchun nom kiriting (masalan: Obuna bo‘lish).");
+});
 
-  const msg = ctx.message.text;
+// 3-bosqich: Tugma nomi
+bot.on("text", async (ctx, next) => {
+  const uid = String(ctx.from.id);
+  const st = STATE[uid];
+  if (!st || st.mode !== "send_ads" || st.step !== 3) return next();
+
+  patchState(uid, { step: 4, data: { ...st.data, btn_text: ctx.message.text } });
+  return ctx.reply("🔗 Endi tugma uchun link yuboring (masalan: https://t.me/saikostars).");
+});
+
+// 4-bosqich: Tugma linki va reklama yuborish
+bot.on("text", async (ctx, next) => {
+  const uid = String(ctx.from.id);
+  const st = STATE[uid];
+  if (!st || st.mode !== "send_ads" || st.step !== 4) return next();
+
+  const btn_url = ctx.message.text;
+  const { text, photo, btn_text } = st.data;
+
+  const keyboard = Markup.inlineKeyboard([[Markup.button.url(btn_text, btn_url)]]);
+
   const allUsers = Object.keys(USERS);
-
   let sent = 0;
+
   for (const u of allUsers) {
     try {
-      await bot.telegram.sendMessage(u, `📢 Reklama:\n\n${msg}`);
+      if (photo) {
+        await bot.telegram.sendPhoto(u, photo, { caption: text, reply_markup: keyboard.reply_markup });
+      } else {
+        await bot.telegram.sendMessage(u, text, keyboard);
+      }
       sent++;
     } catch (e) {
       console.log(`❌ ${u} ga yuborilmadi:`, e.message);
@@ -382,41 +412,54 @@ bot.on("text", async (ctx, next) => {
   }
 
   clearState(uid);
-
-  await ctx.reply(`✅ Reklama yuborildi!\n📨 Yuborilganlar: ${sent} ta foydalanuvchi`);
+  return ctx.reply(`✅ Reklama yuborildi!\n📨 Yuborilganlar: ${sent} ta foydalanuvchi`);
 });
+
 
 // ——— QISM 3 yakunlandi ———
 // 4-QISM: Kinolarni ko‘rish va foydalanuvchiga yuborish
+/************************************************************
+ * Telegram Kino Bot — QISM 4/5 (≈100 qator)
+ * Foydalanuvchi: Kod yuborsa kino chiqadi
+ ************************************************************/
 
-// Kino ro‘yxatini olish
-bot.command("kinolar", (ctx) => {
-  let movies = fs.existsSync("movies.json") ? JSON.parse(fs.readFileSync("movies.json")) : [];
+// Kino kodini yuborgan foydalanuvchi
+bot.on("text", async (ctx, next) => {
+  try {
+    const uid = String(ctx.from.id);
+    const user = ensureUser(uid);
 
-  if (movies.length === 0) {
-    return ctx.reply("📂 Hozircha kinolar qo‘shilmagan.");
+    // Agar foydalanuvchi admin bo‘lsa va admin state ichida bo‘lsa → admin jarayoniga yuboramiz
+    const st = STATE[uid];
+    if (st && st.mode) return next();
+
+    // Agar foydalanuvchi obuna bo‘lmagan bo‘lsa
+    if (!user.subscribed) {
+      return ctx.reply("❌ Siz hali kanallarga obuna bo‘lmadingiz.\nIltimos, /start buyrug‘ini qayta yuboring.");
+    }
+
+    const code = ctx.message.text.trim();
+
+    if (!MOVIES[code]) {
+      return ctx.reply("❌ Bunday kodli kino topilmadi.\nIltimos boshqa kod kiriting.");
+    }
+
+    const movie = MOVIES[code];
+
+    // Kino chiqarish
+    if (movie.file_id) {
+      await ctx.replyWithVideo(movie.file_id, {
+        caption: movie.caption || `🎬 Kod: ${code}`
+      });
+    } else {
+      await ctx.reply("❌ Bu kodli kino fayli saqlanmagan.");
+    }
+  } catch (e) {
+    console.error("kino chiqarishda xato:", e);
+    await ctx.reply("❌ Kino chiqarishda xatolik yuz berdi.");
   }
-
-  let buttons = movies.map((movie, index) => [
-    Markup.button.callback(movie.title, `movie_${index}`)
-  ]);
-
-  ctx.reply("🎬 Kinolar ro‘yxati:", Markup.inlineKeyboard(buttons));
 });
 
-// Tanlangan kinoni chiqarish
-bot.action(/movie_(\d+)/, (ctx) => {
-  let movies = fs.existsSync("movies.json") ? JSON.parse(fs.readFileSync("movies.json")) : [];
-  let index = parseInt(ctx.match[1]);
-
-  if (!movies[index]) return ctx.reply("❌ Kino topilmadi.");
-
-  let movie = movies[index];
-  ctx.replyWithPhoto(movie.image, {
-    caption: `🎬 *${movie.title}*\n📌 ${movie.description}\n\n👉 [Ko‘rish](${movie.link})`,
-    parse_mode: "Markdown"
-  });
-});
 // ===================== 5-QISM: Kino ro‘yxatini chiqarish =====================
 
 // /kinolar komandasi orqali barcha kinolarni ko‘rish
