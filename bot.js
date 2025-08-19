@@ -288,38 +288,49 @@ bot.catch((err) => {
  * Admin: Kino qo‘shish (video → kod → matn)
  * Reklama yuborish (rasm → matn → tugma nomi → tugma linki)
  ************************************************************/
+/************************************************************
+ * Telegram Kino Bot — QISM 3/5
+ * Kino qo‘shish va chiqarish funksiyalari
+ ************************************************************/
 
-// === Kino qo‘shish ===
-bot.hears("🎬 Kino qo‘shish", async (ctx) => {
-  if (!isAdmin(ctx)) return;
-  startState(ctx.from.id, { mode: "add_movie", step: 1, data: {} });
-  await ctx.reply("🎬 Iltimos kino videosini yuboring:");
+// 1) Kino qo‘shish
+bot.command("addkino", async (ctx) => {
+  if (!admins.includes(String(ctx.from.id))) {
+    return ctx.reply("⛔ Siz admin emassiz!");
+  }
+  ctx.reply("🎬 Kino nomini yuboring:");
+
+  bot.once("text", async (ctx2) => {
+    let kinoNom = ctx2.message.text;
+
+    ctx2.reply("📎 Kino linkini yuboring:");
+    bot.once("text", async (ctx3) => {
+      let kinoLink = ctx3.message.text;
+
+      let newKino = { nom: kinoNom, link: kinoLink };
+      movies.push(newKino);
+
+      fs.writeFileSync("movies.json", JSON.stringify(movies, null, 2));
+
+      ctx3.reply(
+        `✅ Kino qo‘shildi!\n\n🎬 Nomi: ${kinoNom}\n🔗 Link: ${kinoLink}`
+      );
+    });
+  });
 });
 
-// 1-bosqich: Video olish
-bot.on("video", async (ctx, next) => {
-  const uid = String(ctx.from.id);
-  const st = STATE[uid];
-  if (!st || st.mode !== "add_movie" || st.step !== 1) return next();
-
-  const file_id = ctx.message.video.file_id;
-  patchState(uid, { step: 2, data: { file_id } });
-  return ctx.reply("✅ Video qabul qilindi.\n\nEndi kino uchun KOD yuboring (masalan: 1001).");
-});
-
-// 2-bosqich: Kod olish
-bot.on("text", async (ctx, next) => {
-  const uid = String(ctx.from.id);
-  const st = STATE[uid];
-  if (!st || st.mode !== "add_movie" || st.step !== 2) return next();
-
-  const code = ctx.message.text.trim();
-  if (MOVIES[code]) {
-    return ctx.reply("❌ Bu kod allaqachon mavjud. Boshqa kod yuboring.");
+// 2) Kinolar ro‘yxatini chiqarish
+bot.command("kinolar", async (ctx) => {
+  if (movies.length === 0) {
+    return ctx.reply("📭 Hozircha kinolar qo‘shilmagan.");
   }
 
-  patchState(uid, { step: 3, data: { ...st.data, code } });
-  return ctx.reply("✅ Kod qabul qilindi.\n\nEndi kino uchun matn (caption) yuboring:");
+  let text = "🎬 Kinolar ro‘yxati:\n\n";
+  movies.forEach((kino, i) => {
+    text += `${i + 1}. ${kino.nom}\n🔗 ${kino.link}\n\n`;
+  });
+
+  ctx.reply(text);
 });
 
 // 3-bosqich: Caption olish va saqlash
