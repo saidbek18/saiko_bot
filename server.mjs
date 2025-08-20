@@ -23,6 +23,17 @@ mongoose
   )
   .then(() => console.log("✅ MongoDB ulanish muvaffaqiyatli"))
   .catch((err) => console.error("❌ MongoDB ulanish xatosi:", err));
+// User modeli
+const User = mongoose.model("User", new mongoose.Schema({
+  username: String,
+  chatId: String
+}));
+
+// Movie modeli
+const Movie = mongoose.model("Movie", new mongoose.Schema({
+  title: String,
+  fileId: String
+}));
 
 // Oddiy route test
 app.get("/", (req, res) => {
