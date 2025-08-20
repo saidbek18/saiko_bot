@@ -12,35 +12,74 @@ const PORT = process.env.PORT || 5000;
 // Middleware
 app.use(bodyParser.json());
 
-// 🔗 MongoDB ulanish
+// ================== MongoDB ULANISH ==================
 mongoose
-  .connect(
-    "mongodb+srv://kamolovsaidbek:mZhv1MAWUhnZxwyM@cluster0.haqf33d.mongodb.net/kinobot?retryWrites=true&w=majority&appName=Cluster0", 
-    {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    }
-  )
-  .then(() => console.log("✅ MongoDB ulanish muvaffaqiyatli"))
+  .connect(process.env.MONGO_URI, {
+    useNewUrlParser: true,
+    useUnifiedTopology: true,
+  })
+  .then(() => console.log("✅ MongoDB ulandi"))
   .catch((err) => console.error("❌ MongoDB ulanish xatosi:", err));
-// User modeli
-const User = mongoose.model("User", new mongoose.Schema({
+
+// ================== SCHEMALAR ==================
+// User schema
+const userSchema = new mongoose.Schema({
+  userId: { type: String, required: true },  // Telegram user ID
   username: String,
-  chatId: String
-}));
-
-// Movie modeli
-const Movie = mongoose.model("Movie", new mongoose.Schema({
-  title: String,
-  fileId: String
-}));
-
-// Oddiy route test
-app.get("/", (req, res) => {
-  res.send("Server ishlayapti 🚀");
+  joinedAt: { type: Date, default: Date.now },
 });
 
-// Server ishga tushirish
+const User = mongoose.model("User", userSchema);
+
+// Movie schema
+const movieSchema = new mongoose.Schema({
+  code: { type: String, required: true, unique: true }, // Kino kodi
+  title: String,
+  description: String,
+  videoUrl: String,
+  addedAt: { type: Date, default: Date.now },
+});
+
+const Movie = mongoose.model("Movie", movieSchema);
+
+// ================== ROUTELAR ==================
+// User qo‘shish
+app.post("/users", async (req, res) => {
+  try {
+    const { userId, username } = req.body;
+    const user = new User({ userId, username });
+    await user.save();
+    res.json({ message: "✅ User saqlandi", user });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Userlarni olish
+app.get("/users", async (req, res) => {
+  const users = await User.find();
+  res.json(users);
+});
+
+// Kino qo‘shish
+app.post("/movies", async (req, res) => {
+  try {
+    const { code, title, description, videoUrl } = req.body;
+    const movie = new Movie({ code, title, description, videoUrl });
+    await movie.save();
+    res.json({ message: "🎬 Kino qo‘shildi", movie });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// Kinolarni olish
+app.get("/movies", async (req, res) => {
+  const movies = await Movie.find();
+  res.json(movies);
+});
+
+// ================== SERVERNI ISHLATISH ==================
 app.listen(PORT, () => {
-  console.log(`✅ Server ${PORT}-portda ishlayapti`);
+  console.log(`🚀 Server http://localhost:${PORT} da ishlamoqda`);
 });
