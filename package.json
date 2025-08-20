@@ -4,14 +4,17 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node bot.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "body-parser": "^2.2.0",
+    "dotenv": "^17.2.1",
+    "express": "^5.1.0",
     "mongodb": "^6.18.0",
+    "mongoose": "^8.17.2",
     "node-fetch": "^2.7.0",
     "node-telegram-bot-api": "^0.66.0",
     "telegraf": "^4.16.3"
