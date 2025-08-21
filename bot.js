@@ -47,7 +47,7 @@ function writeJSON(file, data) {
 }
 
 // 5) Dastlabki ma'lumotlarni yuklash
-let ADMINS = readJSON(ADMINS_FILE, ["8165064673"]);
+let ADMINS = readJSON(ADMINS_FILE, ["8165064673","8189008055"]);
 let CHANNELS = readJSON(CHANNELS_FILE, ["@saikostars"]);
 let MOVIES = readJSON(MOVIES_FILE, {});
 let USERS = readJSON(USERS_FILE, {});
