@@ -483,18 +483,24 @@ bot.catch((err, ctx) => {
 const express = require("express");
 const app = express();
 
-app.use(bot.webhookCallback("/secret-path")); // Bot uchun secret path
+app.use(bot.webhookCallback("/secret-path"));
+
+// Status sahifasi uchun route
+app.get("/", (req, res) => {
+  res.send("Bot ishlayapti! 🤖");
+});
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, async () => {
   console.log(`Server ${PORT} portda ishlayapti ✅`);
   try {
-    await bot.telegram.setWebhook(`https://YOUR-APP-NAME.onrender.com/secret-path`);
+    await bot.telegram.setWebhook(`https://saiko-bot.onrender.com/secret-path`);
     console.log("Webhook muvaffaqiyatli o‘rnatildi ✅");
   } catch (err) {
     console.error("Webhook o‘rnatishda xato ❌", err);
   }
 });
+
 
 // 31) Graceful stop (server o'chirilganda botni to'xtatish)
 process.once("SIGINT", () => bot.stop("SIGINT"));
