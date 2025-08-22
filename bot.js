@@ -479,15 +479,21 @@ bot.catch((err, ctx) => {
   console.error(`Botda xato:`, err);
 });
 
-// 30) Botni ishga tushirish
-bot.launch()
-  .then(() => {
-    console.log("Bot muvaffaqiyatli ishga tushdi ✅");
-  })
-  .catch((err) => {
-    console.error("Botni ishga tushirishda xato ❌", err);
-  });
+// 30) Webhook server (Render uchun)
+const express = require("express");
+const app = express();
 
-// 31) Graceful stop (server o'chirilganda botni to'xtatish)
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
+app.use(bot.webhookCallback("/secret-path")); // Bot uchun secret path
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, async () => {
+  console.log(`Server ${PORT} portda ishlayapti ✅`);
+  try {
+    await bot.telegram.setWebhook(`https://YOUR-APP-NAME.onrender.com/secret-path`);
+    console.log("Webhook muvaffaqiyatli o‘rnatildi ✅");
+  } catch (err) {
+    console.error("Webhook o‘rnatishda xato ❌", err);
+  }
+});
+
+
