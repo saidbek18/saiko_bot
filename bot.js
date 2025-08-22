@@ -496,4 +496,6 @@ app.listen(PORT, async () => {
   }
 });
 
-
+// 31) Graceful stop (server o'chirilganda botni to'xtatish)
+process.once("SIGINT", () => bot.stop("SIGINT"));
+process.once("SIGTERM", () => bot.stop("SIGTERM"));
