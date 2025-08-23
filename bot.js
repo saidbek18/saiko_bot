@@ -7,6 +7,22 @@ const { Telegraf, Markup } = require("telegraf");
 const fs = require("fs");
 const path = require("path");
 
+const express = require("express");
+const app = express();
+const PORT = process.env.PORT || 10000;
+
+const BOT_TOKEN = process.env.BOT_TOKEN;
+const bot = new Telegraf(BOT_TOKEN);
+
+// bu yerda webhook callback ulanadi 👇
+app.use(bot.webhookCallback("/secret-path"));
+
+// server ishga tushishi
+app.listen(PORT, async () => {
+  console.log(`Server ${PORT} portda ishlayapti ✅`);
+  await bot.telegram.setWebhook(`https://saiko-bot.onrender.com/secret-path`);
+  console.log("Webhook muvaffaqiyatli o‘rnatildi ✅");
+});
 // 2) Config (TOKENNI ALMASHTIR!)
 const BOT_TOKEN = "7782418983:AAFw1FYb-ESFb-1abiSudFlzhukTAkylxFA";
 if (!BOT_TOKEN) {
