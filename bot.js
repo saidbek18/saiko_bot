@@ -1,5 +1,5 @@
 /************************************************************
- * Telegram Kino Bot — To'liq versiya
+ * Telegram Kino Bot — To'liq versiya (tozalangan)
  ************************************************************/
 
 // 1) Kutubxonalar
@@ -15,26 +15,6 @@ if (!BOT_TOKEN) {
   process.exit(1);
 }
 const bot = new Telegraf(BOT_TOKEN);
-
-const app = express();
-const PORT = process.env.PORT || 10000;
-app.use(bot.webhookCallback("/secret-path"));
-
-// Status sahifasi uchun route
-app.get("/", (req, res) => {
-  res.send("Bot ishlayapti! 🤖");
-});
-
-// Server ishga tushishi
-app.listen(PORT, async () => {
-  console.log(`Server ${PORT} portda ishlayapti ✅`);
-  try {
-    await bot.telegram.setWebhook(`https://saiko-bot.onrender.com/secret-path`);
-    console.log("Webhook muvaffaqiyatli o‘rnatildi ✅");
-  } catch (err) {
-    console.error("Webhook o‘rnatishda xato ❌", err);
-  }
-});
 
 // 3) Fayl yo'llari
 const DATA_DIR = __dirname;
@@ -73,13 +53,6 @@ let CHANNELS = readJSON(CHANNELS_FILE, ["@saikokino"]);
 let MOVIES = readJSON(MOVIES_FILE, {});
 let USERS = readJSON(USERS_FILE, {});
 let STATE = readJSON(STATE_FILE, {});
-
-// 6) Ma'lumotlarni normallashtirish
-if (!Array.isArray(ADMINS)) ADMINS = [];
-if (!Array.isArray(CHANNELS)) CHANNELS = [];
-if (typeof MOVIES !== "object" || Array.isArray(MOVIES)) MOVIES = {};
-if (typeof USERS !== "object" || Array.isArray(USERS)) USERS = {};
-if (typeof STATE !== "object" || Array.isArray(STATE)) STATE = {};
 
 // 6) Ma'lumotlarni normallashtirish (xavfsiz holat)
 if (!Array.isArray(ADMINS)) ADMINS = [];
@@ -182,7 +155,7 @@ bot.start(async (ctx) => {
   }
 });
 
-// 12) Tekshirish (callback orqali) — "✅ Tekshirish" tugmasi
+// 12) Tekshirish (callback orqali)
 bot.action("check_subs", async (ctx) => {
   try {
     await ctx.answerCbQuery();
@@ -225,7 +198,7 @@ bot.action("check_subs", async (ctx) => {
   }
 });
 
-// 13) /check — fallback (agar foydalanuvchi slash bilan yozsa)
+// 13) /check — slash bilan
 bot.command("check", async (ctx) => {
   try {
     const uid = String(ctx.from.id);
@@ -249,7 +222,7 @@ bot.command("check", async (ctx) => {
   }
 });
 
-// 14) /admin — faqat adminlarga ko'rinadigan bosh menyu
+// 14) /admin — bosh menyu
 bot.command("admin", async (ctx) => {
   if (!isAdmin(ctx)) return;
   await ctx.reply(
@@ -262,7 +235,7 @@ bot.command("admin", async (ctx) => {
   );
 });
 
-// 15) Bekor qilish — har qanday admin jarayonini to'xtatadi
+// 15) Bekor qilish
 bot.hears("⛔ Bekor qilish", async (ctx) => {
   const uid = String(ctx.from.id);
   if (isAdmin(ctx)) {
@@ -281,7 +254,7 @@ bot.hears("⛔ Bekor qilish", async (ctx) => {
   }
 });
 
-// 16) Oddiy yordamchi komandalar
+// 16) Yordam
 bot.command("help", async (ctx) => {
   await ctx.reply(
     "Yordam:\n" +
@@ -292,41 +265,37 @@ bot.command("help", async (ctx) => {
   );
 });
 
-// 17) 🎬 Kino qo'shish tugmasi
+// 17) 🎬 Kino qo'shish (bosqichli)
 bot.hears("🎬 Kino qo'shish", async (ctx) => {
   if (!isAdmin(ctx)) return ctx.reply("⛔ Siz admin emassiz!");
-
   startState(ctx.from.id, { mode: "add_movie", step: 1, data: {} });
   await ctx.reply("🎬 Kino uchun kod yuboring (masalan: 1001):");
 });
 
-// 18) 1-bosqich: kod qabul qilish
+// 18) 1-bosqich: kod
 bot.on("text", async (ctx, next) => {
   const uid = String(ctx.from.id);
   const st = STATE[uid];
-
   if (!st || st.mode !== "add_movie" || st.step !== 1) return next();
 
   patchState(uid, { step: 2, data: { code: ctx.message.text.trim() } });
   return ctx.reply("📎 Kino videosini yuboring:");
 });
 
-// 19) 2-bosqich: video qabul qilish
+// 19) 2-bosqich: video
 bot.on("video", async (ctx, next) => {
   const uid = String(ctx.from.id);
   const st = STATE[uid];
-
   if (!st || st.mode !== "add_movie" || st.step !== 2) return next();
 
   patchState(uid, { step: 3, data: { ...st.data, file_id: ctx.message.video.file_id } });
   return ctx.reply("✍️ Kino matnini yuboring:");
 });
 
-// 20) 3-bosqich: caption qabul qilish va saqlash
+// 20) 3-bosqich: caption va saqlash
 bot.on("text", async (ctx, next) => {
   const uid = String(ctx.from.id);
   const st = STATE[uid];
-
   if (!st || st.mode !== "add_movie" || st.step !== 3) return next();
 
   const caption = ctx.message.text;
@@ -337,19 +306,17 @@ bot.on("text", async (ctx, next) => {
 
   clearState(uid);
 
-  return ctx.reply(
-    `✅ Kino qo'shildi!\n\n📌 Kod: ${code}\n🎬 Matn: ${caption}`
-  );
+  return ctx.reply(`✅ Kino qo'shildi!\n\n📌 Kod: ${code}\n🎬 Matn: ${caption}`);
 });
 
-// 21) === Reklama yuborish ===
+// 21) 📢 Reklama yuborish (bosqichli)
 bot.hears("📢 Reklama yuborish", async (ctx) => {
   if (!isAdmin(ctx)) return;
   startState(ctx.from.id, { mode: "send_ads", step: 1, data: {} });
   await ctx.reply("📢 Reklama uchun rasm yuboring yoki /skip bu bosqichni o'tkazing.");
 });
 
-// 22) 1-bosqich: Rasm olish yoki skip
+// 22) Reklama — rasm yoki /skip
 bot.on("photo", async (ctx, next) => {
   const uid = String(ctx.from.id);
   const st = STATE[uid];
@@ -368,7 +335,7 @@ bot.command("skip", async (ctx) => {
   return ctx.reply("⏩ Rasm bosqichi o'tkazildi.\n\nEndi reklama matnini yuboring:");
 });
 
-// 23) 2-bosqich: Matn olish
+// 23) Reklama — matn
 bot.on("text", async (ctx, next) => {
   const uid = String(ctx.from.id);
   const st = STATE[uid];
@@ -378,7 +345,7 @@ bot.on("text", async (ctx, next) => {
   return ctx.reply("✍️ Endi tugma uchun nom kiriting (masalan: Obuna bo'lish).");
 });
 
-// 24) 3-bosqich: Tugma nomi
+// 24) Reklama — tugma nomi
 bot.on("text", async (ctx, next) => {
   const uid = String(ctx.from.id);
   const st = STATE[uid];
@@ -388,7 +355,7 @@ bot.on("text", async (ctx, next) => {
   return ctx.reply("🔗 Endi tugma uchun link yuboring (masalan: https://t.me/saikostars).");
 });
 
-// 25) 4-bosqich: Tugma linki va reklama yuborish
+// 25) Reklama — link va yuborish
 bot.on("text", async (ctx, next) => {
   const uid = String(ctx.from.id);
   const st = STATE[uid];
@@ -419,7 +386,7 @@ bot.on("text", async (ctx, next) => {
   return ctx.reply(`✅ Reklama yuborildi!\n📨 Yuborilganlar: ${sent} ta foydalanuvchi`);
 });
 
-// 26) Kino kodini yuborgan foydalanuvchi
+// 26) Kod yuborgan foydalanuvchi (oddiy holat)
 bot.on("text", async (ctx, next) => {
   try {
     const uid = String(ctx.from.id);
@@ -453,7 +420,7 @@ bot.on("text", async (ctx, next) => {
   }
 });
 
-// 27) /kinolar komandasi orqali barcha kinolarni ko'rish
+// 27) /kinolar — ro'yxat
 bot.command("kinolar", async (ctx) => {
   try {
     const movieCodes = Object.keys(MOVIES);
@@ -474,7 +441,7 @@ bot.command("kinolar", async (ctx) => {
   }
 });
 
-// 28) /kino [kod] orqali bitta kinoni chiqarish
+// 28) /kino [kod] — bitta kino
 bot.command("kino", async (ctx) => {
   try {
     const args = ctx.message.text.split(" ");
@@ -508,29 +475,29 @@ bot.catch((err, ctx) => {
 });
 
 // 30) Webhook server (Render uchun)
-const express = require("express");
 const app = express();
+const WEBHOOK_PATH = "/secret-path";
+const WEBHOOK_URL = process.env.WEBHOOK_URL || "https://saiko-bot.onrender.com/secret-path";
+const PORT = process.env.PORT || 10000;
 
-app.use(bot.webhookCallback("/secret-path"));
+app.use(bot.webhookCallback(WEBHOOK_PATH));
 
-// Status sahifasi uchun route
+// Status sahifasi
 app.get("/", (req, res) => {
-  res.send("Bot ishlayapti! 🤖");
+  res.send("Bot ishlayapti ✅");
 });
 
-const PORT = process.env.PORT || 10000;
+// Serverni ishga tushirish va webhook o'rnatish
 app.listen(PORT, async () => {
   console.log(`Server ${PORT} portda ishlayapti ✅`);
   try {
-    await bot.telegram.setWebhook(`https://saiko-bot.onrender.com/secret-path`);
+    await bot.telegram.setWebhook(WEBHOOK_URL);
     console.log("Webhook muvaffaqiyatli o‘rnatildi ✅");
   } catch (err) {
     console.error("Webhook o‘rnatishda xato ❌", err);
   }
 });
 
-
-
-// 31) Graceful stop (server o'chirilganda botni to'xtatish)
+// 31) Graceful stop
 process.once("SIGINT", () => bot.stop("SIGINT"));
 process.once("SIGTERM", () => bot.stop("SIGTERM"));
