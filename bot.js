@@ -6,26 +6,35 @@
 const { Telegraf, Markup } = require("telegraf");
 const fs = require("fs");
 const path = require("path");
-
 const express = require("express");
-const app = express();
-const PORT = process.env.PORT || 10000;
 
-// bu yerda webhook callback ulanadi 👇
-app.use(bot.webhookCallback("/secret-path"));
-
-// server ishga tushishi
-app.listen(PORT, async () => {
-  console.log(`Server ${PORT} portda ishlayapti ✅`);
-  await bot.telegram.setWebhook(`https://saiko-bot.onrender.com/secret-path`);
-  console.log("Webhook muvaffaqiyatli o‘rnatildi ✅");
-});
+// 2) Bot sozlamalari
 const BOT_TOKEN = process.env.BOT_TOKEN || "7782418983:AAFw1FYb-ESFb-1abiSudFlzhukTAkylxFA";
 if (!BOT_TOKEN) {
   console.error("❌ BOT_TOKEN topilmadi.");
   process.exit(1);
 }
 const bot = new Telegraf(BOT_TOKEN);
+
+const app = express();
+const PORT = process.env.PORT || 10000;
+app.use(bot.webhookCallback("/secret-path"));
+
+// Status sahifasi uchun route
+app.get("/", (req, res) => {
+  res.send("Bot ishlayapti! 🤖");
+});
+
+// Server ishga tushishi
+app.listen(PORT, async () => {
+  console.log(`Server ${PORT} portda ishlayapti ✅`);
+  try {
+    await bot.telegram.setWebhook(`https://saiko-bot.onrender.com/secret-path`);
+    console.log("Webhook muvaffaqiyatli o‘rnatildi ✅");
+  } catch (err) {
+    console.error("Webhook o‘rnatishda xato ❌", err);
+  }
+});
 
 // 3) Fayl yo'llari
 const DATA_DIR = __dirname;
@@ -64,6 +73,13 @@ let CHANNELS = readJSON(CHANNELS_FILE, ["@saikokino"]);
 let MOVIES = readJSON(MOVIES_FILE, {});
 let USERS = readJSON(USERS_FILE, {});
 let STATE = readJSON(STATE_FILE, {});
+
+// 6) Ma'lumotlarni normallashtirish
+if (!Array.isArray(ADMINS)) ADMINS = [];
+if (!Array.isArray(CHANNELS)) CHANNELS = [];
+if (typeof MOVIES !== "object" || Array.isArray(MOVIES)) MOVIES = {};
+if (typeof USERS !== "object" || Array.isArray(USERS)) USERS = {};
+if (typeof STATE !== "object" || Array.isArray(STATE)) STATE = {};
 
 // 6) Ma'lumotlarni normallashtirish (xavfsiz holat)
 if (!Array.isArray(ADMINS)) ADMINS = [];
