@@ -11,9 +11,6 @@ const express = require("express");
 const app = express();
 const PORT = process.env.PORT || 10000;
 
-const BOT_TOKEN = process.env.BOT_TOKEN;
-const bot = new Telegraf(BOT_TOKEN);
-
 // bu yerda webhook callback ulanadi 👇
 app.use(bot.webhookCallback("/secret-path"));
 
