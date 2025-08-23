@@ -23,10 +23,9 @@ app.listen(PORT, async () => {
   await bot.telegram.setWebhook(`https://saiko-bot.onrender.com/secret-path`);
   console.log("Webhook muvaffaqiyatli o‘rnatildi ✅");
 });
-// 2) Config (TOKENNI ALMASHTIR!)
-const BOT_TOKEN = "7782418983:AAFw1FYb-ESFb-1abiSudFlzhukTAkylxFA";
+const BOT_TOKEN = process.env.BOT_TOKEN || "7782418983:AAFw1FYb-ESFb-1abiSudFlzhukTAkylxFA";
 if (!BOT_TOKEN) {
-  console.error("❌ BOT_TOKEN topilmadi. Iltimos kodga token yozing.");
+  console.error("❌ BOT_TOKEN topilmadi.");
   process.exit(1);
 }
 const bot = new Telegraf(BOT_TOKEN);
@@ -506,7 +505,7 @@ app.get("/", (req, res) => {
   res.send("Bot ishlayapti! 🤖");
 });
 
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 10000;
 app.listen(PORT, async () => {
   console.log(`Server ${PORT} portda ishlayapti ✅`);
   try {
@@ -516,6 +515,7 @@ app.listen(PORT, async () => {
     console.error("Webhook o‘rnatishda xato ❌", err);
   }
 });
+
 
 
 // 31) Graceful stop (server o'chirilganda botni to'xtatish)
