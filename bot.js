@@ -1,6 +1,4 @@
-/************************************************************
- * Telegram Kino Bot — To'liq versiya (tozalangan)
- ************************************************************/
+
 
 // 1) Kutubxonalar
 const { Telegraf, Markup } = require("telegraf");
@@ -54,12 +52,31 @@ let MOVIES = readJSON(MOVIES_FILE, {});
 let USERS = readJSON(USERS_FILE, {});
 let STATE = readJSON(STATE_FILE, {});
 
-// 6) Ma'lumotlarni normallashtirish (xavfsiz holat)
-if (!Array.isArray(ADMINS)) ADMINS = [];
-if (!Array.isArray(CHANNELS)) CHANNELS = [];
-if (typeof MOVIES !== "object" || Array.isArray(MOVIES)) MOVIES = {};
-if (typeof USERS !== "object" || Array.isArray(USERS)) USERS = {};
-if (typeof STATE !== "object" || Array.isArray(STATE)) STATE = {};
+bot.command("add", async (ctx) => {
+  // format: /add <kod> <kino nomi>
+  const args = ctx.message.text.split(" ");
+  args.shift(); // "/add" ni olib tashlaymiz
+  const kod = args.shift();
+  const title = args.join(" ");
+
+  if (!kod || !title) {
+    return ctx.reply("❌ Foydalanish: /add <kod> <kino_nomi>");
+  }
+
+  // JSONni o‘qiymiz
+  let movies = readJSON("movies.json", {});
+
+  // yangi kino obyektini qo‘shamiz
+  movies[kod] = {
+    file_id: "boshlanishiga hech narsa yo‘q", // keyinchalik yangilanadi
+    caption: `#🍿| Kino Nomi: ${title}\n\n📈Kodi: ${kod}\n\n🔰| Kanal: t.me/saikokino\n\n🤖 Bizning bot: @zxsaikobot`
+  };
+
+  // faylga yozamiz
+  writeJSON("movies.json", movies);
+
+  ctx.reply(`✅ "${title}" kodi ${kod} bilan qo‘shildi va saqlandi.`);
+});
 
 // 7) Kichik util funktsiyalar
 const isAdmin = (ctx) => ADMINS.includes(String(ctx.from?.id || ""));
@@ -301,12 +318,23 @@ bot.on("text", async (ctx, next) => {
   const caption = ctx.message.text;
   const { code, file_id } = st.data;
 
-  MOVIES[code] = { file_id, caption };
-  writeJSON(MOVIES_FILE, MOVIES);
+  // 1️⃣ Fayldan hozirgi kinolarni o‘qiymiz
+  let movies = readJSON(MOVIES_FILE, {});
 
+  // 2️⃣ Yangi kinoni qo‘shamiz
+  movies[code] = { file_id, caption };
+
+  // 3️⃣ Faylga qayta yozamiz
+  writeJSON(MOVIES_FILE, movies);
+
+  // 4️⃣ Xotirada ham yangilaymiz
+  MOVIES = movies;
+
+  // 5️⃣ State’ni tozalaymiz
   clearState(uid);
 
-  return ctx.reply(`✅ Kino qo'shildi!\n\n📌 Kod: ${code}\n🎬 Matn: ${caption}`);
+  // 6️⃣ Javob
+  await ctx.reply(`✅ Kino qo'shildi va saqlandi!\n\n📌 Kod: ${code}\n🎬 Matn: ${caption}`);
 });
 
 // 21) 📢 Reklama yuborish (bosqichli)
