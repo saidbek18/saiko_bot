@@ -318,24 +318,29 @@ bot.on("text", async (ctx, next) => {
   const caption = ctx.message.text;
   const { code, file_id } = st.data;
 
-  // 1️⃣ Fayldan hozirgi kinolarni o‘qiymiz
+  // Fayldan hozirgi kinolarni o‘qiymiz
   let movies = readJSON(MOVIES_FILE, {});
 
-  // 2️⃣ Yangi kinoni qo‘shamiz
-  movies[code] = { file_id, caption };
+  // Yangi kinoni qo‘shamiz
+  movies[code] = {
+    file_id,
+    caption: caption || `🎬 Kod: ${code}`
+  };
 
-  // 3️⃣ Faylga qayta yozamiz
+  // JSONga yozamiz
   writeJSON(MOVIES_FILE, movies);
 
-  // 4️⃣ Xotirada ham yangilaymiz
+  // Xotirada ham yangilaymiz
   MOVIES = movies;
 
-  // 5️⃣ State’ni tozalaymiz
+  // State’ni tozalaymiz
   clearState(uid);
 
-  // 6️⃣ Javob
-  await ctx.reply(`✅ Kino qo'shildi va saqlandi!\n\n📌 Kod: ${code}\n🎬 Matn: ${caption}`);
+  await ctx.reply(
+    `✅ Kino qo'shildi va saqlandi!\n\n📌 Kod: ${code}\n🎬 Matn: ${caption}`
+  );
 });
+
 
 // 21) 📢 Reklama yuborish (bosqichli)
 bot.hears("📢 Reklama yuborish", async (ctx) => {
