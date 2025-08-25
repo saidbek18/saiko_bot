@@ -9,7 +9,7 @@ const fs = require("fs");
 const path = require("path");
 const express = require("express");
 // 2) Config
-const BOT_TOKEN = process.env.BOT_TOKEN || "";
+const BOT_TOKEN = process.env.BOT_TOKEN || "7782418983:AAFw1FYb-ESFb-1abiSudFlzhukTAkylxFA";
 if (!BOT_TOKEN) {
   console.error("❌ BOT_TOKEN topilmadi. Iltimos kodga token yozing yoki ENV ga qo‘ying.");
   process.exit(1);
