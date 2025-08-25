@@ -420,51 +420,40 @@ bot.on("text", async (ctx, next) => {
 
 // Kino kodini yuborgan foydalanuvchi
 bot.on("text", async (ctx, next) => {
-    try {
-      const uid = String(ctx.from.id);
-      const user = ensureUser(uid);
-  
-      // Agar foydalanuvchi admin bo‘lsa va admin state ichida bo‘lsa → admin jarayoniga yuboramiz
-      const st = STATE[uid];
-      if (st && st.mode) return next();
-  
-      // Agar foydalanuvchi obuna bo‘lmagan bo‘lsa
-      if (!user.subscribed) {
-        return ctx.reply("❌ Siz hali kanallarga obuna bo‘lmadingiz.\nIltimos, /start buyrug‘ini qayta yuboring.");
-      }
-  
-      const code = ctx.message.text.trim();
-  
-      if (!MOVIES[code]) {
-        return ctx.reply("❌ Bunday kodli kino topilmadi.\nIltimos boshqa kod kiriting.");
-      }
-  
-      const movie = MOVIES[code];
-  
-      /// Kino yoki multik chiqarish
-bot.hears(/^\d+$/, async (ctx) => {
-  const code = ctx.message.text.trim();
   try {
-    const movies = JSON.parse(fs.readFileSync("movies.json"));
-    const movie = movies.find(m => m.code === code);
+    const uid = String(ctx.from.id);
+    const user = ensureUser(uid);
 
-    if (!movie) {
-      return ctx.reply("❌ Bunday kodli kino/multik topilmadi.");
+    // Agar foydalanuvchi admin bo‘lsa va admin state ichida bo‘lsa → admin jarayoniga yuboramiz
+    const st = STATE[uid];
+    if (st && st.mode) return next();
+
+    // Agar foydalanuvchi obuna bo‘lmagan bo‘lsa
+    if (!user.subscribed) {
+      return ctx.reply("❌ Siz hali kanallarga obuna bo‘lmadingiz.\nIltimos, /start buyrug‘ini qayta yuboring.");
     }
+
+    const code = ctx.message.text.trim();
+
+    if (!MOVIES[code]) {
+      return ctx.reply("❌ Bunday kodli kino topilmadi.\nIltimos boshqa kod kiriting.");
+    }
+
+    const movie = MOVIES[code];
 
     if (movie.file_id) {
       await ctx.replyWithVideo(movie.file_id, {
         caption: movie.caption || `🎬 Kod: ${code}`
       });
     } else {
-      await ctx.reply("❌ Bu kodli fayl saqlanmagan.");
+      await ctx.reply("❌ Bu kodli kino fayli saqlanmagan.");
     }
-
   } catch (e) {
-    console.error("fayl chiqarishda xato:", e);
-    await ctx.reply("❌ Kino/multik chiqarishda xatolik yuz berdi.");
+    console.error("kino chiqarishda xato:", e);
+    await ctx.reply("❌ Kino chiqarishda xatolik yuz berdi.");
   }
 });
+
 
 // ===================== 5-QISM: Kino ro‘yxatini chiqarish =====================
 
