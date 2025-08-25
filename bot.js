@@ -8,14 +8,13 @@ const { Telegraf, Markup } = require("telegraf");
 const fs = require("fs");
 const path = require("path");
 
-// 2) Config (TOKENNI ALMASHTIR!)
-const BOT_TOKEN = "7782418983:AAFw1FYb-ESFb-1abiSudFlzhukTAkylxFA"; // <-- tokeningiz
+// 2) Config
+const BOT_TOKEN = process.env.BOT_TOKEN || "7782418983:AAFw1FYb-ESFb-1abiSudFlzhukTAkylxFA";
 if (!BOT_TOKEN) {
-  console.error("❌ BOT_TOKEN topilmadi. Iltimos kodga token yozing.");
+  console.error("❌ BOT_TOKEN topilmadi. Iltimos kodga token yozing yoki ENV ga qo‘ying.");
   process.exit(1);
 }
 
-// 3) Botni yaratish
 const bot = new Telegraf(BOT_TOKEN);
 
 // 3) Fayl yo'llari
@@ -509,15 +508,11 @@ bot.catch((err, ctx) => {
 bot.launch({
   polling: true   // <--- polling yoqildi, webhook bilan konflikt bo‘lmaydi
 })
-// Botni ishga tushirish
-bot.launch()
-  .then(() => {
-    console.log("Bot muvaffaqiyatli ishga tushdi ✅");
-  })
-  .catch((err) => {
-    console.error("Botni ishga tushirishda xato ❌", err);
-  });
+// 10) Botni ishga tushirish (Polling, Background Worker)
+bot.launch({
+  polling:true
+}).then(()=>console.log("Bot muvaffaqiyatli ishga tushdi ✅"))
+  .catch(err=>console.error("Botni ishga tushirishda xato ❌",err));
 
-// Graceful stop (server o‘chirilganda botni to‘xtatish)
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
+process.once("SIGINT",()=>bot.stop("SIGINT"));
+process.once("SIGTERM",()=>bot.stop("SIGTERM"));
