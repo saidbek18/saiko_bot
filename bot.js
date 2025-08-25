@@ -14,6 +14,8 @@ if (!BOT_TOKEN) {
   console.error("❌ BOT_TOKEN topilmadi. Iltimos kodga token yozing.");
   process.exit(1);
 }
+
+// 3) Botni yaratish
 const bot = new Telegraf(BOT_TOKEN);
 
 // 3) Fayl yo'llari
@@ -504,7 +506,9 @@ bot.command("kino", (ctx) => {
 bot.catch((err, ctx) => {
   console.error(`Botda xato:`, err);
 });
-
+bot.launch({
+  polling: true   // <--- polling yoqildi, webhook bilan konflikt bo‘lmaydi
+})
 // Botni ishga tushirish
 bot.launch()
   .then(() => {
