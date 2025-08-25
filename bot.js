@@ -501,6 +501,29 @@ bot.command("kino", (ctx) => {
 });
 // 6-qism: Botni tugatish va ishga tushirish
 
+// 30) Webhook server (Render uchun)
+const app = express();
+const WEBHOOK_PATH = "/secret-path";
+const WEBHOOK_URL = process.env.WEBHOOK_URL || "https://saiko-bot.onrender.com/secret-path";
+const PORT = process.env.PORT || 10000;
+
+app.use(bot.webhookCallback(WEBHOOK_PATH));
+
+// Status sahifasi
+app.get("/", (req, res) => {
+  res.send("Bot ishlayapti ✅");
+});
+
+// Serverni ishga tushirish va webhook o'rnatish
+app.listen(PORT, async () => {
+  console.log(`Server ${PORT} portda ishlayapti ✅`);
+  try {
+    await bot.telegram.setWebhook(WEBHOOK_URL);
+    console.log("Webhook muvaffaqiyatli o‘rnatildi ✅");
+  } catch (err) {
+    console.error("Webhook o‘rnatishda xato ❌", err);
+  }
+});
 // Xatolarni tutish
 bot.catch((err, ctx) => {
   console.error(`Botda xato:`, err);
