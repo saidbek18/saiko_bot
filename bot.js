@@ -16,7 +16,7 @@ if (!BOT_TOKEN) {
 }
 
 const bot = new Telegraf(BOT_TOKEN);
-
+const app = express();
 // 3) Fayl yo'llari
 const DATA_DIR = __dirname;
 const ADMINS_FILE   = path.join(DATA_DIR, "admins.json");
