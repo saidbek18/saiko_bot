@@ -441,19 +441,31 @@ bot.on("text", async (ctx, next) => {
   
       const movie = MOVIES[code];
   
-      // Kino chiqarish
-      if (movie.file_id) {
-        await ctx.replyWithVideo(movie.file_id, {
-          caption: movie.caption || `🎬 Kod: ${code}`
-        });
-      } else {
-        await ctx.reply("❌ Bu kodli kino fayli saqlanmagan.");
-      }
-    } catch (e) {
-      console.error("kino chiqarishda xato:", e);
-      await ctx.reply("❌ Kino chiqarishda xatolik yuz berdi.");
+      /// Kino yoki multik chiqarish
+bot.hears(/^\d+$/, async (ctx) => {
+  const code = ctx.message.text.trim();
+  try {
+    const movies = JSON.parse(fs.readFileSync("movies.json"));
+    const movie = movies.find(m => m.code === code);
+
+    if (!movie) {
+      return ctx.reply("❌ Bunday kodli kino/multik topilmadi.");
     }
-  });
+
+    if (movie.file_id) {
+      await ctx.replyWithVideo(movie.file_id, {
+        caption: movie.caption || `🎬 Kod: ${code}`
+      });
+    } else {
+      await ctx.reply("❌ Bu kodli fayl saqlanmagan.");
+    }
+
+  } catch (e) {
+    console.error("fayl chiqarishda xato:", e);
+    await ctx.reply("❌ Kino/multik chiqarishda xatolik yuz berdi.");
+  }
+});
+
 // ===================== 5-QISM: Kino ro‘yxatini chiqarish =====================
 
 // /kinolar komandasi orqali barcha kinolarni ko‘rish
