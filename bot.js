@@ -529,9 +529,7 @@ app.listen(PORT, async () => {
 bot.catch((err, ctx) => {
   console.error(`Botda xato:`, err);
 });
-bot.launch({
-  polling: true   // <--- polling yoqildi, webhook bilan konflikt bo‘lmaydi
-})
+
 // 10) Botni ishga tushirish (Polling, Background Worker)
 bot.launch({
   polling:true
