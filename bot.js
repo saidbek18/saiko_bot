@@ -85,16 +85,22 @@ function setUser(userId, patch) {
 // 8) Kanal tugmalari (inline)
 function channelKeyboard() {
   const buttons = CHANNELS.map((ch, i) => {
-    // agar username ko‘rinishida bo‘lsa (@...), uni linkka aylantiramiz
-    const link = ch.startsWith("@") ? `https://t.me/${ch.substring(1)}` : ch;
-    return [Markup.button.url(`📢 Kanal ${i+4}`, link)];
+    let link = ch;
+
+    // Agar @ bilan boshlansa, uni https://t.me/ ga aylantiramiz
+    if (ch.startsWith("@")) {
+      link = `https://t.me/${ch.substring(1)}`;
+    }
+
+    return [Markup.button.url(`📢 Kanal ${i + 1}`, link)];
   });
 
-  // pastiga tekshirish tugmasi
+  // pastiga tekshirish tugmasi qo‘shamiz
   buttons.push([Markup.button.callback("✅ Tekshirish", "check_subs")]);
 
   return Markup.inlineKeyboard(buttons);
 }
+
 
 
 // 9) Obuna tekshirish (haqiqiy)
