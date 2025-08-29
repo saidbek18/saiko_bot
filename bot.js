@@ -83,19 +83,22 @@ function setUser(userId, patch) {
 }
 
 // 8) Kanal tugmalari (inline)
+//  🔹 Kanal tugmalari yasash funksiyasi
 function channelKeyboard() {
+  // Har bir kanal uchun alohida tugma yaratamiz
   const buttons = CHANNELS.map((ch, i) => {
     let link = ch;
 
-    // Agar @ bilan boshlansa, uni https://t.me/ ga aylantiramiz
+    // Agar @ bilan boshlangan bo‘lsa, t.me/ ga aylantiramiz
     if (ch.startsWith("@")) {
       link = `https://t.me/${ch.substring(1)}`;
     }
 
+    // Tugma nomi: "📢 Kanal 1", "📢 Kanal 2", ...
     return [Markup.button.url(`📢 Kanal ${i + 1}`, link)];
   });
 
-  // pastiga tekshirish tugmasi qo‘shamiz
+  // Oxiriga "Tekshirish ✅" tugmasini qo‘shamiz
   buttons.push([Markup.button.callback("✅ Tekshirish", "check_subs")]);
 
   return Markup.inlineKeyboard(buttons);
