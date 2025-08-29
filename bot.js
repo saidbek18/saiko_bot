@@ -51,7 +51,7 @@ function writeJSON(file, data) {
 
 // 5) Dastlabki ma'lumotlarni yuklash
 let ADMINS   = readJSON(ADMINS_FILE,   ["8165064673"]);   // default admin ID (string)
-let CHANNELS = readJSON(CHANNELS_FILE, ["@saikokino","@zxsaikomusic"]);  // kanal usernamelari
+let CHANNELS = readJSON(CHANNELS_FILE, ["@saikokino","@zayafkakanal12","@saikokinochati","https://www.instagram.com/saiko_kino?igsh=MW9rZWNjZjBwN3M4bA=="]);  // kanal usernamelari
 let MOVIES   = readJSON(MOVIES_FILE,   {});               // { "kod": "file_id" | {file_id, caption} }
 let USERS    = readJSON(USERS_FILE,    {});               // { userId: { subscribed: bool, ... } }
 let STATE    = readJSON(STATE_FILE,    {});               // { adminId: { mode, step, ... } }
@@ -84,13 +84,18 @@ function setUser(userId, patch) {
 
 // 8) Kanal tugmalari (inline)
 function channelKeyboard() {
-  const rows = CHANNELS.map((ch) => {
-    const url = `https://t.me/${String(ch).replace("@", "")}`;
-    return [Markup.button.url(String(ch), url)];
+  const buttons = CHANNELS.map((ch, i) => {
+    // agar username ko‘rinishida bo‘lsa (@...), uni linkka aylantiramiz
+    const link = ch.startsWith("@") ? `https://t.me/${ch.substring(1)}` : ch;
+    return [Markup.button.url(`📢 Kanal ${i+1}`, link)];
   });
-  rows.push([Markup.button.callback("✅ Tekshirish", "check_subs")]);
-  return Markup.inlineKeyboard(rows);
+
+  // pastiga tekshirish tugmasi
+  buttons.push([Markup.button.callback("✅ Tekshirish", "check_subs")]);
+
+  return Markup.inlineKeyboard(buttons);
 }
+
 
 // 9) Obuna tekshirish (haqiqiy)
 async function notSubscribedChannels(ctx, userId = null) {
