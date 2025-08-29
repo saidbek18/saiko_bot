@@ -87,7 +87,7 @@ function channelKeyboard() {
   const buttons = CHANNELS.map((ch, i) => {
     // agar username ko‘rinishida bo‘lsa (@...), uni linkka aylantiramiz
     const link = ch.startsWith("@") ? `https://t.me/${ch.substring(1)}` : ch;
-    return [Markup.button.url(`📢 Kanal ${i+1}`, link)];
+    return [Markup.button.url(`📢 Kanal ${i+4}`, link)];
   });
 
   // pastiga tekshirish tugmasi
