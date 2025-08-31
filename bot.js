@@ -51,7 +51,7 @@ function writeJSON(file, data) {
 
 // 5) Dastlabki ma'lumotlarni yuklash
 let ADMINS   = readJSON(ADMINS_FILE,   ["8165064673"]);   // default admin ID (string)
-let CHANNELS = readJSON(CHANNELS_FILE, ["@saikokino","@zayafkakanal12","@saikokinochati","https://www.instagram.com/saiko_kino?igsh=MW9rZWNjZjBwN3M4bA=="]);  // kanal usernamelari
+let CHANNELS = readJSON(CHANNELS_FILE, ["@Multfilmlaruzbektilidabizda","@zayafkakanal12","@saikokinochati","https://www.instagram.com/saiko_kino?igsh=MW9rZWNjZjBwN3M4bA=="]);  // kanal usernamelari
 let MOVIES   = readJSON(MOVIES_FILE,   {});               // { "kod": "file_id" | {file_id, caption} }
 let USERS    = readJSON(USERS_FILE,    {});               // { userId: { subscribed: bool, ... } }
 let STATE    = readJSON(STATE_FILE,    {});               // { adminId: { mode, step, ... } }
