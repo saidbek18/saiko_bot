@@ -51,7 +51,7 @@ function writeJSON(file, data) {
 
 // 5) Dastlabki ma'lumotlarni yuklash
 let ADMINS   = readJSON(ADMINS_FILE,   ["8165064673"]);   // default admin ID (string)
-let CHANNELS = readJSON(CHANNELS_FILE, ["@Multfilmlaruzbektilidabizda","@zayafkakanal12","@saikokinochati","https://www.instagram.com/saiko_kino?igsh=MW9rZWNjZjBwN3M4bA=="]);  // kanal usernamelari
+let CHANNELS = readJSON(CHANNELS_FILE, ["@Multfilmlaruzbektilidabizda"]);  // kanal usernamelari
 let MOVIES   = readJSON(MOVIES_FILE,   {});               // { "kod": "file_id" | {file_id, caption} }
 let USERS    = readJSON(USERS_FILE,    {});               // { userId: { subscribed: bool, ... } }
 let STATE    = readJSON(STATE_FILE,    {});               // { adminId: { mode, step, ... } }
@@ -229,29 +229,7 @@ bot.action("check_subs", async (ctx) => {
   }
 });
 
-// 13) /check — fallback (agar foydalanuvchi slash bilan yozsa)
-bot.command("check", async (ctx) => {
-  try {
-    const uid = String(ctx.from.id);
-    ensureUser(uid);
-    const missing = await notSubscribedChannels(ctx, uid);
-    if (missing.length > 0) {
-      return ctx.reply(
-        "Hali ham obuna to‘liq emas. Iltimos quyidagilarga a‘zo bo‘ling va yana /check yuboring:",
-        channelKeyboard()
-      );
-    }
 
-    setUser(uid, { subscribed: true });
-    await ctx.reply(
-      `✅ Obuna tasdiqlandi!\n\nSalom, *${ctx.from.first_name || ctx.from.username || "do‘st"}* 👋\nEndi kino kodini yuboring (masalan: 1001).`,
-      { parse_mode: "Markdown" }
-    );
-  } catch (e) {
-    console.error("/check error:", e);
-    await ctx.reply("Xatolik yuz berdi. Keyinroq urinib ko‘ring.");
-  }
-});
 
 
 // 14) /admin — faqat adminlarga ko‘rinadigan bosh menyu
@@ -268,16 +246,7 @@ bot.command("admin", async (ctx) => {
 
 
 
-// 16) Oddiy yordamchi komandalar
-bot.command("help", async (ctx) => {
-  await ctx.reply(
-    "Yordam:\n" +
-    "— /start — boshlash\n" +
-    "— /check — obunani tekshirish\n" +
-    "— Kino kodini yuboring: masalan, 1001\n" +
-    (isAdmin(ctx) ? "— /admin — admin panel\n" : "")
-  );
-});
+
 
 // 17) Har qanday xato uchun global catcher (qoladi)
 bot.catch((err) => {
